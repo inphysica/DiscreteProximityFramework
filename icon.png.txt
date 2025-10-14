@@ -1,0 +1,1 @@
+This file is a placeholder for an icon (binary image files are not stored here). Replace with a 24x24 or 32x32 PNG named icon.png in the plugin folder.
