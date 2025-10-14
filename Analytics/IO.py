@@ -12,7 +12,7 @@ from qgis.PyQt.QtWidgets import QDialog, QPushButton, QLineEdit, QFileDialog, QM
 from qgis.PyQt.QtCore import QCoreApplication
 
 
-def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], destination_prefix_whitelist = [], max_duration = 0, bar = None, selection = None ):
+def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], destination_prefix_whitelist = [], max_duration = 0, bar = None, selection = None, limit=0 ):
 
 
     """
@@ -33,9 +33,13 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
         hasDestinationPrefixWhitelist = True
     
 
+    if bar is not None:
+        bar.setMaximum(1)
+        bar.setValue(0)
+        bar.repaint()
+        QCoreApplication.processEvents()
 
-
-    print( "read ODM: " + filepath)
+    # print( "read ODM: " + filepath)
 
     stamp_0 = datetime.now()
 
@@ -51,6 +55,15 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
     query = "SELECT * FROM OD"
     if selection is not None and len(selection) > 0:
         query += " WHERE origin IN (%s)" % ",".join( ["'%s'" % s for s in selection] )
+        if limit > 0:
+            query += " AND distance <  %s" % limit
+    else:
+        if limit > 0:
+            query += " WHERE distance <  %s" % limit
+
+
+    print( query )
+
     cursor.execute(query)
     rows = cursor.fetchall()
 
@@ -64,6 +77,13 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
         bar.setValue(0)
         bar.repaint()
         QCoreApplication.processEvents()
+
+
+    print( " -> total rows in ODM: %s" % len(rows) )
+
+    if len(rows) == 0:
+        print(" -> No rows in ODM!")
+        return None
 
     for row in rows:
         stat += 1
