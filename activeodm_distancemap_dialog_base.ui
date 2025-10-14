@@ -104,7 +104,7 @@
        <string>Max time (minutes)</string>
       </property>
      </widget>
-     <widget class="QgsDoubleSpinBox" name="MaxRangeDial">
+     <widget class="QgsDoubleSpinBox" name="MaxDurationDial">
       <property name="geometry">
        <rect>
         <x>130</x>

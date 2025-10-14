@@ -99,7 +99,6 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         except Exception:
             pass
 
-
     def _on_ok(self):
 
         settings = QSettings()
@@ -107,12 +106,12 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         last_odm_path = settings.value('DiscreteProximityFramework/last_odm_path','')
 
         speed_raw = settings.setValue('DiscreteProximityFramework/Speed',self.speedDial.value())
-        max_range_raw = settings.setValue('DiscreteProximityFramework/MaxRange',self.MaxRangeDial.value())
+        max_duration_raw = settings.setValue('DiscreteProximityFramework/MaxDuration',self.MaxDurationDial.value())
         max_distance_raw = settings.setValue('DiscreteProximityFramework/MaxDistance',self.MaxDistanceDial.value())
 
         self._log(f"Storing last ODM path: {last_odm_path}")
         self._log(f"Storing speed: {speed_raw}")
-        self._log(f"Storing max range: {max_range_raw}")
+        self._log(f"Storing max duration: {max_duration_raw}")
         self._log(f"Storing max distance: {max_distance_raw}")
 
         self._log(f"Current layer id: {self.current_layer_id}")
@@ -124,11 +123,14 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
 
             if (self.Build()):
                 self._log("Build successful")
+                
+            else:
+                self._log("Build failed")
                 return
-            pass
+            
         else:
 
-            self.labelCurrentStatus.setText("")
+            self.labelCurrentStatus.setText(" Exit without build")
             self.repaint()
             return
 
@@ -181,7 +183,6 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
                     self.done(0)
                 except Exception:
                     pass
-
 
     def _save_current_selection(self, layer_id=None):
         if layer_id is None:
@@ -324,11 +325,11 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
                 settings.setValue('DiscreteProximityFramework/last_odm_path', '')
 
         speed_raw = settings.value('DiscreteProximityFramework/Speed',4.5)
-        max_range_raw = settings.value('DiscreteProximityFramework/MaxRange',20)
-        max_distance_raw = settings.value('DiscreteProximityFramework/MaxDistance',2000)
+        max_duration_raw = settings.value('DiscreteProximityFramework/MaxDuration',20)
+        max_distance_raw = settings.value('DiscreteProximityFramework/MaxDistance',1.5)
 
         self.speedDial.setValue(float(speed_raw))
-        self.MaxRangeDial.setValue(float(max_range_raw))
+        self.MaxDurationDial.setValue(float(max_duration_raw))
         self.MaxDistanceDial.setValue(float(max_distance_raw))
 
     def updateLayer(self, layer):
@@ -557,10 +558,6 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
 
         src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
 
-        # print(src_layer.dataProvider().dataSourceUri())
-
-        # print(self.onlySelectedFeatures.isChecked())
-
         if self.checkBox_ResultDistance.isChecked() == False and self.checkBox_ResultDuration.isChecked() == False:
             QMessageBox.critical(
                 self.iface.mainWindow(),
@@ -569,7 +566,6 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
                 QMessageBox.Ok
             )
             return False
-
 
 
         if (self.onlySelectedFeatures.isChecked() == True):
@@ -619,6 +615,8 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
                 else:
                     # user canceled
                     return False
+                
+        return True
 
     def Build(self):
 
@@ -627,14 +625,24 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         self.labelCurrentStatus.setText("Collecting Features ...")
         self.repaint()
 
-        Pairs = sub_collectPairs(self, name_field=self.nameSelector.currentText(), id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
+        origins, selection = sub_collectPairs(self, name_field=self.nameSelector.currentText(), id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
 
         odm_path = self.fileSelector.filePath()
 
         self.labelCurrentStatus.setText("Reading ODM file ...")
         self.repaint()
 
-        ODM = read_ODM(odm_path, False, bar=self.progressBar)
+        min_limit = min(self.speedDial.value() * (self.MaxDurationDial.value() / 60)*1000, self.MaxDistanceDial.value()*1000)  # in meters
+
+        ODM = read_ODM(odm_path, False, bar=self.progressBar, selection=selection, limit=min_limit)
+        if ODM is None:
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "Error matching origins",
+                "It seems that you have selected wrong ID field or the ODM file does not contain matching origins. Please check your selections. Typical attribute is PosID",
+                QMessageBox.Ok
+            )
+            return False
 
         self.labelCurrentStatus.setText("Building distance map ...")
         self.repaint()
@@ -642,18 +650,17 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         # ODM[origin][destination] = (distance, duration)
 
         src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
-        distanceMap = sub_BuildDistanceMap(self, ODM, Pairs, src_layer=src_layer, speed=self.speedDial.value(), max_range=self.MaxRangeDial.value(), bar=self.progressBar)
+        distanceMap = sub_BuildDistanceMap(self, ODM, origins, src_layer=src_layer, speed=self.speedDial.value(), bar=self.progressBar)
 
         self.labelCurrentStatus.setText("Exporting results ...")
         self.repaint()
 
-        sub_Export(self, distanceMap)
+        sub_Export(self, distanceMap, origins)
 
         self.labelCurrentStatus.setText("Done")
         self.repaint()
 
         return True
-
 
 
 def sub_collectPairs(self, name_field, id_field, use_name=True):
@@ -672,6 +679,7 @@ def sub_collectPairs(self, name_field, id_field, use_name=True):
 
 
     origins = []
+    selection = []
 
     self.labelCurrentStatus.setText("Collecting origins ...")
     self.repaint()
@@ -694,13 +702,14 @@ def sub_collectPairs(self, name_field, id_field, use_name=True):
             name = str(id_)  
 
         origins.append( (id_, name) )
+        selection.append(id_)
 
 
     
 
-    return origins
+    return origins, selection
 
-def sub_BuildDistanceMap(self, ODM, origins, src_layer, speed=4.5, max_range=20, bar=None):
+def sub_BuildDistanceMap(self, ODM, origins, src_layer, speed=4.5, bar=None):
 
     # ODM[origin][destination] = (distance, duration)
 
@@ -729,10 +738,8 @@ def sub_BuildDistanceMap(self, ODM, origins, src_layer, speed=4.5, max_range=20,
         for dest_id, (distance, duration) in dests.items():
 
 
-
-
-            if distance > max_range * 1000:  # convert km to m
-                continue
+            # if distance > max_range * 1000:  # convert km to m
+            #     continue
 
             walk_time = distance / (speed * 1000 / 60)  # speed km/h -> m/min
 
@@ -740,46 +747,17 @@ def sub_BuildDistanceMap(self, ODM, origins, src_layer, speed=4.5, max_range=20,
 
     return DistanceMap
 
-def sub_Export(self, distancemap):
-
-    # layer = QgsVectorLayer(self.current_layer_id, "Results",  "memory")
-
-    # QgsProject.instance().addMapLayer(layer)
-
-    # SaveOpts = QgsVectorLayerExporter.SaveVectorOptions
-
-    # exporter = QgsVectorLayerExporter.exportLayer(
-    #     uri="",  # specify output URI here
-    #     provider = "memory",
-    #     self.current_layer_id,
-    #     QgsCoordinateTransformContext(),
-    #     SaveOpts
-    # )
-    
+def sub_Export(self, distancemap, origins):
 
 
-    # SaveOpts = QgsVectorLayerExporter.SaveVectorOptions
+    # https://qgis.org/pyqgis/master/core/QgsVectorLayer.html
 
-    # err = QgsVectorLayerExporter.exportLayer(
-    #     self.current_layer_id, uri="", provider="memory",
-    #     transformContext=QgsCoordinateTransformContext(),
-    #     options=SaveOpts
-    # )
-
-    # try:
-    #     SaveOpts = QgsVectorLayerExporter.SaveVectorOptions  # ≥ 3.20
-    # except AttributeError:
-    #     SaveOpts = QgsVectorFileWriter.SaveVectorOptions      # ≤ 3.18
-
-    # options = SaveOpts()
-    # uri = ""            # not needed for memory
-    # provider = "memory"
     src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
     print(src_layer.dataProvider().dataSourceUri())
 
-
     # layer = QgsVectorLayer(src_layer.dataProvider().dataSourceUri(), "polygon", "ogr")
     feats = [feat for feat in src_layer.getFeatures()]
+
 
     # print(src_layer.crs().authid())
     # print(QgsWkbTypes.displayString(wkb_type))
@@ -795,18 +773,90 @@ def sub_Export(self, distancemap):
     mem_layer.updateFields()
     mem_layer_data.addFeatures(feats)
 
-    new_field = QgsField("new_column", QVariant.String)
+
+    # Lets populate all new fields
+
     mem_layer.startEditing()
-    mem_layer.addAttribute(new_field)
+
+    self.labelCurrentStatus.setText("Preparing new fields...")
+    self.repaint()
+
+    bar=self.progressBar
+    if bar is not None:
+        bar.setMaximum(len(origins))
+        bar.setValue(0)
+        bar.repaint()
+        QCoreApplication.processEvents()
+
+
+
+    for i, origin in enumerate(origins):
+        bar.setValue(i)
+        QCoreApplication.processEvents()
+
+        id_ = origin[0]
+        name = origin[1]
+
+        if self.checkBox_ResultDistance.isChecked():
+            new_field = QgsField(f"from_{name}_Distance", QVariant.Double)
+            mem_layer.addAttribute(new_field)
+        if self.checkBox_ResultDuration.isChecked():
+            new_field = QgsField(f"from_{name}_Duration", QVariant.Double)
+            mem_layer.addAttribute(new_field)
+
     mem_layer.updateFields()
     mem_layer.commitChanges()
 
-    # for f in mem_layer.getFeatures():
-    #     if f["new_column"] == "OldName":
-    #         f["new_column"] = "NewName"
-    #         mem_layer.updateFeature(f)
+    self.labelCurrentStatus.setText("Populateing attributes with distance data...")
+    self.repaint()
+
+
+    if bar is not None:
+        bar.setMaximum(len(feats))
+        bar.setValue(0)
+        bar.repaint()
+        QCoreApplication.processEvents()
+
+
+    mem_layer.startEditing()
+
+
+    for i, f in enumerate(mem_layer.getFeatures()):
+
+        bar.setValue(i)
+        QCoreApplication.processEvents()
+
+        destination = f[ self.idSelector.currentText()] # destination ID
+
+        for origin in origins:
+
+            id_ = origin[0]
+            name = origin[1]
+
+            result_distance = -1
+            result_duration = -1
+
+            if destination == id_:
+                result_distance = 0
+                result_duration = 0
+
+            if id_  in distancemap:
+                if destination  in distancemap[id_]:
+                    
+                    distance, duration, walk_time = distancemap[id_][destination]
+
+                    result_distance = distance
+                    result_duration = duration
+
+            if self.checkBox_ResultDistance.isChecked():
+                f[f"from_{name}_Distance"] = result_distance # convert to km
+            if self.checkBox_ResultDuration.isChecked():
+                f[f"from_{name}_Duration"] = result_duration  # in minutes
+
+            mem_layer.updateFeature(f)
 
     
+
     # mem_layer.startEditing()
     # for f in mem_layer.getFeatures():
     #     f["new_column"] = "XX_"  + f["PosID"] 
