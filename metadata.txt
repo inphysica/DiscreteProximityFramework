@@ -1,7 +1,7 @@
 [general]
 name=DiscreteProximityFramework
 description=QGIS plugin for discrete proximity operations
-version=0.1.1
+version=0.1.2
 qgisMinimumVersion=3.2
 author=inphysica technology
 email=dev@inphysica.com

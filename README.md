@@ -9,7 +9,7 @@ Installation:
 
 Usage:
 - Open QGIS; in the Plugins menu you'll find "DiscreteProximityFramework".
-- Click the "ActiveODM_DistanceMap" entry to run the placeholder action.
+- Click the "ActiveODM_DistanceMap" 
 
 Files:
 - `discrete_proximity_framework.py` - main plugin class and action handler.
