@@ -58,8 +58,6 @@ def quick_estimate_from_filesize(filepath):
             'error': str(e)
         }
 
-
-
 def estimate_sqlite_load_time(filepath, selection=None, limit=0):
     """
     Estimate how long it will take to load the SQLite ODM file.
@@ -329,3 +327,70 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
         QCoreApplication.processEvents()
 
     return D
+
+def read_GTFS(file_path, max_duration = 0):
+
+    PT = {}
+
+    """
+        
+    RETURN:
+        D[origin][destination] =  (Duration, InitialWaiting, CumulativeWalking)
+
+
+    """
+
+
+    print( "read GTFS: " + file_path)
+
+    stamp_0 = datetime.now()
+
+    PT = {}
+
+    PT_start = {} # entrance stop
+    PT_end = {} # exit stop
+
+
+    conn = sqlite3.connect(file_path)
+    cursor = conn.cursor()
+    query = "SELECT  origin, destination, InitialWaiting, CumulativeDuration, CumulativeWalking  FROM Results"
+    cursor.execute(query)
+    rows = cursor.fetchall()
+
+    skipped = 0
+
+    for row in tqdm(rows):
+
+        origin = row[0]
+        destination = row[1]
+        InitialWaiting = row[2]
+        CumulativeDuration = row[3]
+        CumulativeWalking = row[4]
+
+        Duration = CumulativeDuration - InitialWaiting
+
+        if (max_duration > 0):
+            if Duration > max_duration:
+                skipped+=1 
+                continue
+
+        if origin not in PT:
+            PT[origin] = {}
+
+        PT[origin][destination] = (Duration, InitialWaiting, CumulativeWalking)
+
+        if origin not in PT_start:
+            PT_start[origin] = 0
+
+        if destination not in PT_end:
+            PT_end[destination] = 0
+            
+        PT_start[origin] += 1
+        PT_end[destination] += 1
+        
+    time_diff = datetime.now() - stamp_0
+    print( " -> time:  %s[s]" % time_diff)
+    print( " -> total: %s skipped: %s kept: %s" % (len(rows), skipped , len(rows) - skipped ))
+    
+
+    return PT, PT_start, PT_end
