@@ -3,6 +3,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QDialog
 import os
 from .activeodm_distancemap_dialog import ActiveODMDistanceMapDialog
+from .combinedodm_distancemap_dialog import CombinedODMDistanceMapDialog
 
 
 class DiscreteProximityFramework:
@@ -14,6 +15,7 @@ class DiscreteProximityFramework:
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
         self.action = None
+        self.multimodal_action = None
 
     def tr(self, message):
         return QCoreApplication.translate('DiscreteProximityFramework', message)
@@ -22,10 +24,13 @@ class DiscreteProximityFramework:
 
     def initGui(self):
         """Create menu entries and toolbar icons inside QGIS GUI."""
-        self.action = QAction(self._logo_icon(), self.tr('ActiveODM_DistanceMap'), self.iface.mainWindow())
+
+        # ActiveODM Distance Map action
+        icon_path = os.path.join(os.path.dirname(__file__), "icons", "ActiveDistanceMap.png")
+        self.action = QAction(QIcon(icon_path), self.tr('Active Model Distance Map'), self.iface.mainWindow())
         # keep object name consistent for testing/identification
         self.action.setObjectName('actionActiveODM_DistanceMap')
-        self.action.setToolTip(self.tr('Run ActiveODM Distance Map'))
+        self.action.setToolTip(self.tr('Run Active Model Distance Map'))
         self.action.triggered.connect(self.run_activeodm_distancemap)
 
         # Add to Plugins menu
@@ -36,6 +41,17 @@ class DiscreteProximityFramework:
         except Exception:
             # Older/newer QGIS may differ; ignore if toolbar API not present
             pass
+
+        # Combined Model Distance Map action
+
+        icon_path = os.path.join(os.path.dirname(__file__), "icons", "CombinedDistanceMap.png")
+        self.multimodal_action = QAction(QIcon(icon_path), self.tr('Combined Model Distance Map'), self.iface.mainWindow())
+        self.multimodal_action.setObjectName('actionCombinedModel_DistanceMap')
+        self.multimodal_action.setToolTip(self.tr('Run Combined Model Distance Map (ActiveODM + GTFS + Walking)'))
+        self.multimodal_action.triggered.connect(self.run_combinedodm_distancemap)
+
+        # Add to Plugins menu
+        self.iface.addPluginToMenu(self.tr('&Discrete Proximity Framework'), self.multimodal_action)
 
     def unload(self):
         """Remove the plugin menu item and icon."""
@@ -48,31 +64,20 @@ class DiscreteProximityFramework:
                 self.iface.removeToolBarIcon(self.action)
             except Exception:
                 pass
+        if self.multimodal_action:
+            try:
+                self.iface.removePluginMenu(self.tr('&Discrete Proximity Framework'), self.multimodal_action)
+            except Exception:
+                pass
 
     def run_activeodm_distancemap(self):
-        """Handler for 'ActiveODM_DistanceMap' action.
-
-        For now it shows a simple message box. Replace with actual logic later.
-        """
-        # diagnostic message to QGIS log when the action is triggered
-        # try:
-        #     from qgis.core import QgsMessageLog, Qgis
-        #     QgsMessageLog.logMessage('ActiveODM_DistanceMap action triggered', 'DiscreteProximityFramework', Qgis.Info)
-        # except Exception:
-        #     pass
-
-        # QgsMessageLog.logMessage('ActiveODM_DistanceMap action triggered', 'DiscreteProximityFramework', Qgis.Info)
-
-
+        """Handler for 'ActiveODM_DistanceMap' action."""
         dialog = ActiveODMDistanceMapDialog(self.iface.mainWindow(), iface=self.iface)
         result = dialog.exec_()
-        # if result == QDialog.Accepted:
-        #     QMessageBox.information(self.iface.mainWindow(), self.tr('ActiveODM_DistanceMap'), self.tr('ActiveODM Distance Map: OK pressed.'))
-        # else:
-        #     QMessageBox.information(self.iface.mainWindow(), self.tr('ActiveODM_DistanceMap'), self.tr('ActiveODM Distance Map: Cancelled.'))
+
+    def run_combinedodm_distancemap(self):
+        """Handler for 'Multimodal_DistanceMap' action."""
+        dialog = CombinedODMDistanceMapDialog(self.iface.mainWindow(), iface=self.iface)
+        result = dialog.exec_()
 
 
-    def _logo_icon(self):
-        """Load the MCP logo from the plugin directory."""
-        icon_path = os.path.join(os.path.dirname(__file__), "icons", "DistanceMap.png")
-        return QIcon(icon_path)
