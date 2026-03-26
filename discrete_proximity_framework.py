@@ -20,18 +20,17 @@ class DiscreteProximityFramework:
     def tr(self, message):
         return QCoreApplication.translate('DiscreteProximityFramework', message)
 
-
 # Dialog implementation moved to activeodm_distancemap_dialog.py
 
     def initGui(self):
         """Create menu entries and toolbar icons inside QGIS GUI."""
         # Load plugin icon from file if available
-        icon_path = os.path.join(self.plugin_dir, 'icons_DistanceMap.png')
-        if os.path.exists(icon_path):
-            icon = QIcon(icon_path)
-        else:
-            icon = QIcon()
-        self.action = QAction(icon, self.tr('ActiveODM_DistanceMap'), self.iface.mainWindow())
+        # icon_path = os.path.join(self.plugin_dir, 'icons_DistanceMap.png')
+        # if os.path.exists(icon_path):
+        #     icon = QIcon(icon_path)
+        # else:
+        #     icon = QIcon()
+        self.action = QAction(self._logo_icon(), self.tr('ActiveODM_DistanceMap'), self.iface.mainWindow())
         # keep object name consistent for testing/identification
         self.action.setObjectName('actionActiveODM_DistanceMap')
         self.action.setToolTip(self.tr('Run ActiveODM Distance Map'))
@@ -76,3 +75,9 @@ class DiscreteProximityFramework:
         #     QMessageBox.information(self.iface.mainWindow(), self.tr('ActiveODM_DistanceMap'), self.tr('ActiveODM Distance Map: OK pressed.'))
         # else:
         #     QMessageBox.information(self.iface.mainWindow(), self.tr('ActiveODM_DistanceMap'), self.tr('ActiveODM Distance Map: Cancelled.'))
+
+
+    def _logo_icon(self):
+        """Load the MCP logo from the plugin directory."""
+        icon_path = os.path.join(os.path.dirname(__file__), "icons", "DistanceMap.png")
+        return QIcon(icon_path)
