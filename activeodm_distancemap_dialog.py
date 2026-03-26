@@ -18,6 +18,9 @@ from qgis.core import QgsField
 from qgis.PyQt.QtCore import QVariant
 
 import os
+import time
+import json
+from datetime import datetime
 
 try:
     from qgis.core import QgsMessageLog, Qgis, QgsProject
@@ -28,7 +31,7 @@ except Exception:
 
 
 
-from .Analytics.IO import read_ODM
+from .Analytics.IO import read_ODM, estimate_sqlite_load_time, get_sqlite_info, quick_estimate_from_filesize
 
 
 UI_PATH = os.path.join(os.path.dirname(__file__), 'activeodm_distancemap_dialog_base.ui')
@@ -66,7 +69,6 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
 
 
         self.prep_Defaults()
-
 
         # connect layer widget signals (support various QGIS versions)
         layer_widget = getattr(self, 'inputLayer', None)
@@ -109,12 +111,13 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         max_duration_raw = settings.setValue('DiscreteProximityFramework/MaxDuration',self.MaxDurationDial.value())
         max_distance_raw = settings.setValue('DiscreteProximityFramework/MaxDistance',self.MaxDistanceDial.value())
 
+        # Save settings
+        self.save_settings()
+
         self._log(f"Storing last ODM path: {last_odm_path}")
         self._log(f"Storing speed: {speed_raw}")
         self._log(f"Storing max duration: {max_duration_raw}")
         self._log(f"Storing max distance: {max_distance_raw}")
-
-        self._log(f"Current layer id: {self.current_layer_id}")
         
         if self.Evaluate():
 
@@ -168,6 +171,9 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         except Exception:
             pass
         cancel_close = True
+
+        self.save_settings()
+
         try:
             res = self.on_cancel()
             if res is False:
@@ -183,6 +189,69 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
                     self.done(0)
                 except Exception:
                     pass
+
+    def save_settings(self):
+        """Save all settings to QSettings."""
+        settings = QSettings()
+        try:
+            # Save checkboxes
+            settings.setValue('DiscreteProximityFramework/CheckBox_ResultDistance', 
+                            self.checkBox_ResultDistance.isChecked())
+            settings.setValue('DiscreteProximityFramework/CheckBox_ResultDuration', 
+                            self.checkBox_ResultDuration.isChecked())
+            settings.setValue('DiscreteProximityFramework/CheckBox_IncludeName', 
+                            self.checkBox_IncludeName.isChecked())
+            settings.setValue('DiscreteProximityFramework/CheckBox_OnlySelectedFeatures', 
+                            self.onlySelectedFeatures.isChecked())
+            
+            # Save field selectors
+            id_sel, name_sel = self._get_selector()
+            id_field = self._get_current_field(id_sel)
+            name_field = self._get_current_field(name_sel)
+            if id_field:
+                settings.setValue('DiscreteProximityFramework/IdField', id_field)
+            if name_field:
+                settings.setValue('DiscreteProximityFramework/NameField', name_field)
+            
+            self._log("Saved settings")
+        except Exception as e:
+            self._log(f"Error saving settings: {str(e)}", level='debug')
+
+    def load_settings(self):
+        """Load settings from QSettings and apply them."""
+        settings = QSettings()
+        try:
+            # Load checkboxes with sensible defaults
+            result_distance = settings.value('DiscreteProximityFramework/CheckBox_ResultDistance', True, type=bool)
+            result_duration = settings.value('DiscreteProximityFramework/CheckBox_ResultDuration', True, type=bool)
+            include_name = settings.value('DiscreteProximityFramework/CheckBox_IncludeName', True, type=bool)
+            only_selected = settings.value('DiscreteProximityFramework/CheckBox_OnlySelectedFeatures', False, type=bool)
+            
+            # Apply checkbox settings
+            if hasattr(self, 'checkBox_ResultDistance'):
+                self.checkBox_ResultDistance.setChecked(result_distance)
+            if hasattr(self, 'checkBox_ResultDuration'):
+                self.checkBox_ResultDuration.setChecked(result_duration)
+            if hasattr(self, 'checkBox_IncludeName'):
+                self.checkBox_IncludeName.setChecked(include_name)
+            if hasattr(self, 'onlySelectedFeatures'):
+                self.onlySelectedFeatures.setChecked(only_selected)
+            
+            # Load field selectors
+            id_field = settings.value('DiscreteProximityFramework/IdField', '', type=str)
+            name_field = settings.value('DiscreteProximityFramework/NameField', '', type=str)
+            
+            id_sel, name_sel = self._get_selector()
+            
+            # Try to set saved field selections
+            if id_field and id_sel is not None:
+                self._try_set_selector_by_name(id_sel, id_field)
+            if name_field and name_sel is not None:
+                self._try_set_selector_by_name(name_sel, name_field)
+            
+            self._log("Loaded settings")
+        except Exception as e:
+            self._log(f"Error loading settings: {str(e)}", level='debug')
 
     def _save_current_selection(self, layer_id=None):
         if layer_id is None:
@@ -331,6 +400,62 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         self.speedDial.setValue(float(speed_raw))
         self.MaxDurationDial.setValue(float(max_duration_raw))
         self.MaxDistanceDial.setValue(float(max_distance_raw))
+        
+        # Load settings
+        self.load_settings()
+
+    def display_sqlite_info(self):
+        """Display SQLite file information and loading time estimate."""
+        odm_path = self.fileSelector.filePath()
+        
+        if not odm_path or not os.path.exists(odm_path):
+            self.labelCurrentStatus.setText("No ODM file selected")
+            return
+        
+        try:
+            # Show quick estimate immediately (file size only)
+            quick_est = quick_estimate_from_filesize(odm_path)
+            self.labelCurrentStatus.setText(f"ODM: {os.path.basename(odm_path)} | Size: {quick_est['file_size_mb']:.1f} MB | Quick est: {quick_est['estimated_string']}")
+            self.repaint()
+            QCoreApplication.processEvents()
+            
+            # Get detailed file info
+            info = get_sqlite_info(odm_path)
+            if 'error' in info:
+                self.labelCurrentStatus.setText(f"Error reading file info: {info['error']}")
+                return
+            
+            # Get detailed load time estimate (with row counts)
+            estimate = estimate_sqlite_load_time(odm_path)
+            
+            # Display comprehensive info
+            status_text = (
+                f"ODM: {os.path.basename(odm_path)} | "
+                f"Size: {info['file_size_mb']:.1f} MB | "
+                f"Rows: {info['total_rows']:,} | "
+                f"Origins: {info['unique_origins']:,} | "
+                f"Est: {estimate['estimated_string']}"
+            )
+            self.labelCurrentStatus.setText(status_text)
+            
+            # Log detailed info
+            self._log("=== SQLite ODM File Info ===")
+            self._log(f"File: {os.path.basename(odm_path)}")
+            self._log(f"Size: {info['file_size_mb']:.2f} MB")
+            self._log(f"Quick estimate (file size only): {quick_est['estimated_string']}")
+            self._log(f"Detailed estimate (full info): {estimate['estimated_string']}")
+            self._log(f"Total rows: {info['total_rows']:,}")
+            self._log(f"Unique origins: {info['unique_origins']:,}")
+            self._log(f"Unique destinations: {info['unique_destinations']:,}")
+            self._log(f"Rows per origin: {info['rows_per_origin']:.0f}")
+            self._log(f"Distance range: {info['min_distance']:.0f}m - {info['max_distance']:.0f}m (avg: {info['avg_distance']:.0f}m)")
+            self._log(f"  File read time: {estimate['file_read_time']:.2f}s")
+            self._log(f"  Processing time: {estimate['processing_time']:.2f}s")
+            self._log("===========================")
+            
+        except Exception as e:
+            self._log(f"Error displaying SQLite info: {str(e)}")
+            self.labelCurrentStatus.setText(f"Error: {str(e)}")
 
     def updateLayer(self, layer):
         # allow signals to call with None and resolve currentLayer
@@ -478,11 +603,26 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         if layer is not None:
             try:
                 fields = list(layer.fields())
+                field_names = [f.name() for f in fields]
             except Exception:
                 fields = []
-            if fields:
+                field_names = []
+            
+            # Try to get saved field names from QSettings
+            settings = QSettings()
+            saved_id_field = settings.value('DiscreteProximityFramework/IdField', '', type=str)
+            saved_name_field = settings.value('DiscreteProximityFramework/NameField', '', type=str)
+            
+            # Use saved field if it exists in this layer, otherwise use first field
+            if saved_id_field and saved_id_field in field_names:
+                id_field_name = saved_id_field
+            elif fields:
                 id_field_name = fields[0].name()
-                name_field_name = id_field_name
+            
+            if saved_name_field and saved_name_field in field_names:
+                name_field_name = saved_name_field
+            elif fields:
+                name_field_name = fields[0].name()
 
         id_sel, name_sel = self._get_selector()
         if id_sel is not None and id_field_name:
@@ -621,21 +761,40 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
     def Build(self):
 
         # Load ODM file
+        build_start = time.time()
+        self._log("\n" + "="*50)
+        self._log("BuildDistanceMap STARTED")
+        self._log("="*50)
 
         self.labelCurrentStatus.setText("Collecting Features ...")
         self.repaint()
 
+        step_start = time.time()
         origins, selection = sub_collectPairs(self, name_field=self.nameSelector.currentText(), id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
+        step_duration = time.time() - step_start
+        self._log(f"Collected {len(origins)} origins in {step_duration:.3f}s")
 
         odm_path = self.fileSelector.filePath()
 
-        self.labelCurrentStatus.setText("Reading ODM file ...")
+        # Estimate load time and show it
+        min_limit = min(self.speedDial.value() * (self.MaxDurationDial.value() / 60)*1000, self.MaxDistanceDial.value()*1000)  # in meters       
+        estimate = quick_estimate_from_filesize(odm_path)
+
+        # self._log(f"SQLite load estimate: {estimate['estimated_string']} ({estimate['filtered_rows']:,} rows after filters)")
+        # self._log(f"SQLite load estimate: {estimate['estimated_string']} ({estimate['filtered_rows']:,} rows after filters)")
+    
+        self.labelCurrentStatus.setText(f"Reading ODM file ... (est. {estimate['estimated_string']})")
+        #self.labelCurrentStatus.setText(f"Reading ODM file ... (might take a minute for large files)")
+        
         self.repaint()
 
-        min_limit = min(self.speedDial.value() * (self.MaxDurationDial.value() / 60)*1000, self.MaxDistanceDial.value()*1000)  # in meters
-
+        step_start = time.time()
         ODM = read_ODM(odm_path, False, bar=self.progressBar, selection=selection, limit=min_limit)
+        step_duration = time.time() - step_start
+        self._log(f"Read ODM file in {step_duration:.3f}s")
+        
         if ODM is None:
+            self._log("ERROR: ODM file reading failed")
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 "Error matching origins",
@@ -650,15 +809,22 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         # ODM[origin][destination] = (distance, duration)
 
         src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+        step_start = time.time()
         distanceMap = sub_BuildDistanceMap(self, ODM, origins, src_layer=src_layer, speed=self.speedDial.value(), bar=self.progressBar)
+        step_duration = time.time() - step_start
+        self._log(f"Built distance map in {step_duration:.3f}s")
 
         self.labelCurrentStatus.setText("Exporting results ...")
         self.repaint()
 
-        sub_Export(self, distanceMap, origins)
+        sub_Export_GeoJSON(self, distanceMap, origins)
 
         self.labelCurrentStatus.setText("Done")
         self.repaint()
+
+        build_duration = time.time() - build_start
+        self._log(f"BuildDistanceMap COMPLETED in {build_duration:.3f}s total")
+        self._log("="*50 + "\n")
 
         return True
 
@@ -677,7 +843,6 @@ def sub_collectPairs(self, name_field, id_field, use_name=True):
 
         features = all_features
 
-
     origins = []
     selection = []
 
@@ -692,20 +857,19 @@ def sub_collectPairs(self, name_field, id_field, use_name=True):
     for i, feat in enumerate(features):
 
         bar.setValue(i)
+        bar.repaint()
         QCoreApplication.processEvents()
         
         id_ = str(feat[id_field])
 
         if use_name:
-            name = str(feat[name_field]) + " ({id})"
+            name = str(feat[name_field]) + f" ({id_})"
         else:
             name = str(id_)  
 
         origins.append( (id_, name) )
         selection.append(id_)
 
-
-    
 
     return origins, selection
 
@@ -737,9 +901,6 @@ def sub_BuildDistanceMap(self, ODM, origins, src_layer, speed=4.5, bar=None):
 
         for dest_id, (distance, duration) in dests.items():
 
-
-            # if distance > max_range * 1000:  # convert km to m
-            #     continue
 
             walk_time = distance / (speed * 1000 / 60)  # speed km/h -> m/min
 
@@ -817,9 +978,7 @@ def sub_Export(self, distancemap, origins):
         bar.repaint()
         QCoreApplication.processEvents()
 
-
     mem_layer.startEditing()
-
 
     for i, f in enumerate(mem_layer.getFeatures()):
 
@@ -855,44 +1014,205 @@ def sub_Export(self, distancemap, origins):
 
             mem_layer.updateFeature(f)
 
-    
-
     # mem_layer.startEditing()
     # for f in mem_layer.getFeatures():
     #     f["new_column"] = "XX_"  + f["PosID"] 
     #     mem_layer.updateFeature(f)
     # mem_layer.commitChanges()
 
-
     QgsProject.instance().addMapLayer(mem_layer)
 
 
-
-    # Evalute dataset
+def sub_Export_GeoJSON(self, distancemap, origins):
+    """
+    GeoJSON export using Python's json library - writes directly to GeoJSON file.
+    Much faster than QGIS layer updates. No QGIS API overhead.
+    Output file is saved next to input file with datetime suffix.
+    """
+    total_start = time.time()
+    self._log("=== GeoJSON EXPORT (JSON Library) ===")
+    self._log(f"Starting GeoJSON export with {len(origins)} origins")
     
-    # Import ODM
-    # 
+    src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+    crs_authid = src_layer.crs().authid()
 
+    # Step 1: Load features
+    self.labelCurrentStatus.setText("Loading features...")
+    self.repaint()
 
+    step_start = time.time()
+    feats = [feat for feat in src_layer.getFeatures()]
+    step_duration = time.time() - step_start
+    self._log(f"[1/5] Load features: {step_duration:.3f}s ({len(feats)} features)")
 
-    # self.copy_via_exporter(src_layer)
+    # Step 2: Build data map
+    self.labelCurrentStatus.setText("Building data map...")
+    self.repaint()
 
-    # err = QgsVectorLayerExporter.exportLayer(
-    #         src_layer,          # QgsVectorLayer
-    #         "",                 # uri (unused for memory)
-    #         "memory",           # provider
-    #         src_layer.crs(),    # <- destCRS (QgsCoordinateReferenceSystem), NOT a transform context
-    #         False              # onlySelected
-    #     )
+    bar = self.progressBar
+    if bar is not None:
+        bar.setMaximum(len(feats))
+        bar.setValue(0)
+        bar.repaint()
+        QCoreApplication.processEvents()
+
+    step_start = time.time()
+    feature_data = {}  # Maps feature_id -> {attr: value}
+    id_field_name = self.idSelector.currentText()
+    name_field_name = self.nameSelector.currentText()
+    self._log(f"Using ID field: {id_field_name}, Name field: {name_field_name}")
     
+    data_lookups = 0
+    distance_values_set = 0
 
-    # print(err)
-    # QgsProject.instance().addMapLayer(err)
+    # print(origins)
 
+    for i, feat in enumerate(feats):
+        # if (i + 1) % max(1, len(feats) // 2) == 0:
+        bar.setValue(i)
+        QCoreApplication.processEvents()
 
-    # mem_layer = exporter.layer()
-    # if mem_layer:
-    #     mem_layer.setName(src_layer.name() + " (temp)")
+        destination = feat[id_field_name]
+        feat_attrs = {}
+        
+        # Copy all original attributes
+        for field in feat.fields():
+            feat_attrs[field.name()] = feat[field.name()]
 
+        # Add distance/duration fields
+        for origin in origins:
+            
+            id_ = origin[0]
+            name = origin[1] # it is final name with ID in brackets if checkbox is checked
 
+            result_distance = -1
+            result_duration = -1
+
+            if destination == id_:
+                result_distance = 0
+                result_duration = 0
+            elif id_ in distancemap and destination in distancemap[id_]:
+                distance, duration, walk_time = distancemap[id_][destination]
+                result_distance = distance
+                result_duration = duration
+                data_lookups += 1
+
+            if self.checkBox_ResultDistance.isChecked():
+                feat_attrs[f"from_{name}_Distance"] = result_distance
+                distance_values_set += 1
+            if self.checkBox_ResultDuration.isChecked():
+                feat_attrs[f"from_{name}_Duration"] = result_duration
+                distance_values_set += 1
+
+        feature_data[feat.id()] = (feat, feat_attrs)
+
+    step_duration = time.time() - step_start
+    self._log(f"[2/5] Build data map: {step_duration:.3f}s ({len(feature_data)} features, {data_lookups} lookups)")
+
+    # Step 3: Generate output path
+    step_start = time.time()
+    src_file = src_layer.dataProvider().dataSourceUri()
     
+    if src_file:
+        if '|' in src_file:
+            src_file = src_file.split('|')[0]
+        base_dir = os.path.dirname(src_file)
+        base_name = os.path.splitext(os.path.basename(src_file))[0]
+    else:
+        base_dir = os.path.expanduser('~')
+        base_name = "results"
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    output_filename = f"{base_name}_results_{timestamp}.geojson"
+    output_path = os.path.join(base_dir, output_filename)
+    
+    self._log(f"Output file: {output_path}")
+    step_duration = time.time() - step_start
+    self._log(f"[3/5] Generate path: {step_duration:.3f}s")
+
+    # Step 4: Write GeoJSON directly using json library
+    self.labelCurrentStatus.setText("Writing GeoJSON file...")
+    self.repaint()
+
+    step_start = time.time()
+    
+    try:
+        geojson_features = []
+        
+        if bar is not None:
+            bar.setMaximum(len(feature_data))
+            bar.setValue(0)
+            bar.repaint()
+            QCoreApplication.processEvents()
+
+        for i, (feat_id, (orig_feat, feat_attrs)) in enumerate(feature_data.items()):
+            if (i + 1) % max(1, len(feature_data) // 10) == 0:
+                bar.setValue(i)
+                QCoreApplication.processEvents()
+
+            # Get geometry as GeoJSON
+            geom = orig_feat.geometry()
+            if geom is None or geom.isEmpty():
+                geometry = None
+            else:
+                geometry = json.loads(geom.asJson())
+
+            # Create GeoJSON feature
+            geojson_feat = {
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": feat_attrs
+            }
+            geojson_features.append(geojson_feat)
+
+        # Create FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "crs": {
+                "type": "name",
+                "properties": {
+                    "name": crs_authid
+                }
+            },
+            "features": geojson_features
+        }
+
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(geojson_data, f, indent=2, default=str)
+
+        step_duration = time.time() - step_start
+        file_size = os.path.getsize(output_path) / (1024 * 1024)
+        self._log(f"[4/5] Write file: {step_duration:.3f}s ({file_size:.2f} MB, {len(geojson_features)} features)")
+        
+    except Exception as e:
+        self._log(f"ERROR writing GeoJSON: {str(e)}")
+        return False
+
+    # Step 5: Load into QGIS
+    self.labelCurrentStatus.setText("Loading results layer...")
+    self.repaint()
+
+    step_start = time.time()
+    
+    try:
+        result_layer = QgsVectorLayer(output_path, os.path.basename(output_path), "ogr")
+        if not result_layer.isValid():
+            self._log("ERROR: Failed to load output GeoJSON layer")
+            return False
+        
+        QgsProject.instance().addMapLayer(result_layer)
+        step_duration = time.time() - step_start
+        self._log(f"[5/5] Load layer: {step_duration:.3f}s")
+        
+    except Exception as e:
+        self._log(f"ERROR loading layer: {str(e)}")
+        return False
+
+    total_duration = time.time() - total_start
+    self._log(f"=== TOTAL TIME: {total_duration:.3f}s ===")
+    self._log(f"Summary: {len(feats)} features × {len(origins)} origins")
+    self._log(f"Output: {output_path}")
+    self._log("=== END GeoJSON EXPORT ===")
+    
+    return True

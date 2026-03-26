@@ -12,8 +12,6 @@ class DiscreteProximityFramework:
         iface: QGIS interface instance.
         """
         self.iface = iface
-        # plugin_dir used to locate bundled resources like icons
-        # try to compute plugin directory relative to this file
         self.plugin_dir = os.path.dirname(__file__)
         self.action = None
 
@@ -24,12 +22,6 @@ class DiscreteProximityFramework:
 
     def initGui(self):
         """Create menu entries and toolbar icons inside QGIS GUI."""
-        # Load plugin icon from file if available
-        # icon_path = os.path.join(self.plugin_dir, 'icons_DistanceMap.png')
-        # if os.path.exists(icon_path):
-        #     icon = QIcon(icon_path)
-        # else:
-        #     icon = QIcon()
         self.action = QAction(self._logo_icon(), self.tr('ActiveODM_DistanceMap'), self.iface.mainWindow())
         # keep object name consistent for testing/identification
         self.action.setObjectName('actionActiveODM_DistanceMap')
@@ -68,6 +60,9 @@ class DiscreteProximityFramework:
         #     QgsMessageLog.logMessage('ActiveODM_DistanceMap action triggered', 'DiscreteProximityFramework', Qgis.Info)
         # except Exception:
         #     pass
+
+        # QgsMessageLog.logMessage('ActiveODM_DistanceMap action triggered', 'DiscreteProximityFramework', Qgis.Info)
+
 
         dialog = ActiveODMDistanceMapDialog(self.iface.mainWindow(), iface=self.iface)
         result = dialog.exec_()
