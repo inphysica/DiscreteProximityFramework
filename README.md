@@ -9,7 +9,7 @@ Installation:
 
 Usage:
 - Open QGIS; in the Plugins menu you'll find "DiscreteProximityFramework".
-- Click the "ActiveODM_DistanceMap" 
+- Click the "Active ODM DistanceMap" 
 
 Files:
 - `discrete_proximity_framework.py` - main plugin class and action handler.
@@ -19,3 +19,9 @@ Files:
 Notes:
 - Replace the placeholder message box in `run_activeodm_distancemap` with real processing code.
 - Add an `icon.png` file if you want a toolbar icon.
+
+
+Datasets
+
+- [Acrive Mobility ODM ](https://www.dropbox.com/scl/fi/9oa0fuhag1f7adzd8bl28/ODM-v6B-_ActiveMobility-16km.SQLite?rlkey=1sumzcohot0vbaeuudu33ccei&dl=0)
+
