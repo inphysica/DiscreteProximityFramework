@@ -29,7 +29,7 @@ def quick_estimate_from_filesize(filepath):
         # Estimate based on typical SQLite performance:
         # - Read speed: ~50 MB/s on SSD
         # - Processing overhead: ~0.5x of read time for parsing/dict ops
-        read_speed_mb_s = 50  # MB/s for modern SSD
+        read_speed_mb_s = 60  # MB/s for modern SSD
         processing_factor = 1.5  # 50% overhead for parsing
         
         total_estimated_time = (file_size_mb / read_speed_mb_s) * processing_factor

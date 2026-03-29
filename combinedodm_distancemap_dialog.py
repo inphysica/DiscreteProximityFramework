@@ -789,8 +789,6 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         return True
 
 
-
-
 def sub_collectODs(self, name_field, id_field, use_name=True, bar=None):
 
 
@@ -1055,11 +1053,6 @@ def sub_Export_GeoJSON(self, ODM, origins):
     self._log("=== END GeoJSON EXPORT ===")
     
     return True
-
-
-
-
-
 
 def sub_Export_Combined_GeoJSON(self, ODM, origins):
     """

@@ -226,7 +226,7 @@
       </font>
      </property>
      <property name="title">
-      <string>Constraints</string>
+      <string>Optiojns</string>
      </property>
      <widget class="QLabel" name="label_5">
       <property name="geometry">

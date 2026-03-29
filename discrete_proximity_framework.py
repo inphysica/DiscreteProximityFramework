@@ -32,7 +32,7 @@ class DiscreteProximityFramework:
     def initGui(self):
         """Create menu entries and toolbar icons inside QGIS GUI."""
 
-        message = "2026-03-29B: Version 0.1.3-beta of Discrete Proximity Framework plugin loaded."
+        message = "2026-03-29C: Version 0.1.3-beta of Discrete Proximity Framework plugin loaded."
         QgsMessageLog.logMessage(message, 'DiscreteProximityFramework', Qgis.Info )
         
         # ActiveODM Distance Map action

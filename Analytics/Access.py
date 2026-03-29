@@ -76,31 +76,22 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
     
     """
 
-    # print( "PTODM_ByOrigin: max_total_duration: %s, max_walking_duration: %s, max_direct_walking_duration: %s" % (max_total_duration, max_walking_duration, max_direct_walking_duration) )
 
     stamp_0 = datetime.now()
-
-    # print( " -> Build Destination Subset. Keep only destination which are in sation reach.")
 
     skipped = 0
     ValidPT_byDestination = {}
 
     list_of_missing_destination = ["PosID"]
 
-    # self.labelCurrentStatus.setText("Evaluating destinations...")
-    # self.repaint()
-    # bar = self.progressBar
     bar.setMaximum(len(DestinationSelection))
     bar.setValue(0)
     bar.repaint()
-    # QCoreApplication.processEvents()
-
 
     for i, grd_id in enumerate(DestinationSelection):
         
         bar.setValue(i)
         bar.repaint()
-        # QCoreApplication.processEvents()
         
         ValidPT_byDestination[grd_id] = {}
 
@@ -130,25 +121,15 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
         hasSelection = True
 
     ODM = {}
-    
 
-    # rows = ["PosId\tDestinations\tSum"]
-    
-
-    # self.labelCurrentStatus.setText("Calculating travel duration from origins...")
-    # self.repaint()
-    # bar = self.progressBar
     bar.setMaximum(len(PTAccess))
     bar.setValue(0)
     bar.repaint()
-    # QCoreApplication.processEvents()
-
 
     for i, o in enumerate(PTAccess):
 
         bar.setValue(i)
         bar.repaint()
-        # QCoreApplication.processEvents()
 
         if hasSelection:
             if o not in OriginSelection:
@@ -209,8 +190,7 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
                 L.append(total_duration)
 
             if len(L) == 0:
-
-                # ODM[o][destination] = -1
+                # we can not reach destination by PT, check if we can walk directly
                 continue
 
             else:
@@ -240,8 +220,5 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
             else:
                 s += DestinationWeights[destination]
 
-        # rows.append("%s\t%s\t%s" % (o, len(ODM[o]), s))
-    
-    # print( " ->  %s" % (datetime.now() - stamp_0))
 
     return ODM

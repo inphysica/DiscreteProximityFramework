@@ -833,6 +833,13 @@ class CombinedReachAnalysisDialog(QDialog, FORM_CLASS):
         Override this method for custom OK behavior.
         Return False to prevent dialog from closing.
         """
+
+
+
+        print("OK clicked - override on_ok() for custom behavior")
+
+
+
         return True
 
     def on_cancel(self):
