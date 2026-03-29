@@ -119,7 +119,21 @@ class POICombinedReach(QDialog, FORM_CLASS):
 
         QTimer.singleShot(0, lambda: self.updateLayer(None))
 
-        # connect dialog buttons
+        # connect POI layer widget signals
+        poi_layer_widget = getattr(self, 'poiLayer', None)
+        if poi_layer_widget is not None:
+            for sig in ('currentLayerChanged', 'layerChanged', 'sourceLayerChanged', 'currentIndexChanged'):
+                if hasattr(poi_layer_widget, sig):
+                    try:
+                        if sig == 'currentIndexChanged':
+                            poi_layer_widget.currentIndexChanged.connect(lambda _idx: self.updatePOILayer(None))
+                        else:
+                            getattr(poi_layer_widget, sig).connect(self.updatePOILayer)
+                    except Exception:
+                        continue
+                    break
+        
+        QTimer.singleShot(100, lambda: self.updatePOILayer(None))
         try:
             if hasattr(self, 'buttonBox'):
                 try:
@@ -128,6 +142,14 @@ class POICombinedReach(QDialog, FORM_CLASS):
                     pass
                 try:
                     self.buttonBox.rejected.connect(self._on_cancel)
+                except Exception:
+                    pass
+                # Add Reset button after Cancel button
+                try:
+                    from qgis.PyQt.QtWidgets import QPushButton
+                    reset_button = QPushButton("Reset")
+                    reset_button.clicked.connect(self._on_reset)
+                    self.buttonBox.addButton(reset_button, self.buttonBox.ActionRole)
                 except Exception:
                     pass
         except Exception:
@@ -217,6 +239,30 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 except Exception:
                     pass
 
+    def _on_reset(self):
+        """Reset all numeric values and prefix text box to defaults."""
+        try:
+            self._log('Reset pressed')
+        except Exception:
+            pass
+        
+        try:
+            # Reset numeric fields to defaults
+            self.maxWalkDest.setValue(30.0)
+            self.maxWalkStation.setValue(15.0)
+            self.maxTotalTime.setValue(60.0)
+            self.walkingSpeed.setValue(4.5)
+            self.decayPlatoo.setValue(10.0)
+            self.halfDecayDuration.setValue(5.0)
+            
+            # Reset prefix text box to default
+            if hasattr(self, 'exportPrefixInput'):
+                self.exportPrefixInput.setText('W15')
+            
+            self._log('All numeric values and prefix reset to defaults')
+        except Exception as e:
+            self._log(f'Error during reset: {str(e)}', level='debug')
+
     def save_settings(self):
         """Save all settings to QSettings."""
         settings = QSettings()
@@ -237,20 +283,40 @@ class POICombinedReach(QDialog, FORM_CLASS):
             # Save checkboxes
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', 
                             self.onlySelectedFeatures.isChecked())
-            settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeName', 
-                            self.checkBox_IncludeName.isChecked())
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeTransit',
                             self.checkBox_IncludeTransit.isChecked())
             
+            # Save export prefix
+            export_prefix_input = getattr(self, 'exportPrefixInput', None)
+            if export_prefix_input is not None:
+                settings.setValue(f'{SETTINGS_KEY}/ExportPrefix', export_prefix_input.text())
+            
             # Save field selectors
             id_sel = self._get_id_selector()
-            name_sel = self._get_name_selector()
             id_field = self._get_current_field(id_sel)
-            name_field = self._get_current_field(name_sel)
             if id_field:
                 settings.setValue(f'{SETTINGS_KEY}/IdField', id_field)
-            if name_field:
-                settings.setValue(f'{SETTINGS_KEY}/NameField', name_field)
+            
+            # Save POI layer and selectors
+            poi_layer = getattr(self, 'poiLayer', None)
+            if poi_layer is not None and hasattr(poi_layer, 'currentLayer'):
+                try:
+                    poi = poi_layer.currentLayer()
+                    if poi:
+                        settings.setValue(f'{SETTINGS_KEY}/POILayerId', poi.id())
+                except Exception:
+                    pass
+            
+            poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
+            poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+            if poi_grid_id_sel is not None:
+                poi_grid_id_field = self._get_current_field(poi_grid_id_sel)
+                if poi_grid_id_field:
+                    settings.setValue(f'{SETTINGS_KEY}/POIGridIdNameField', poi_grid_id_field)
+            if poi_group_attr_sel is not None:
+                poi_group_attr_field = self._get_current_field(poi_group_attr_sel)
+                if poi_group_attr_field:
+                    settings.setValue(f'{SETTINGS_KEY}/POIGroupAttrField', poi_group_attr_field)
             
             self._log("Saved combined model settings")
         except Exception as e:
@@ -262,27 +328,48 @@ class POICombinedReach(QDialog, FORM_CLASS):
         try:
             # Load checkboxes
             only_selected = settings.value(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', False, type=bool)
-            include_name = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeName', False, type=bool)
             include_transit = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeTransit', True, type=bool)
             
             if hasattr(self, 'onlySelectedFeatures'):
                 self.onlySelectedFeatures.setChecked(only_selected)
-            if hasattr(self, 'checkBox_IncludeName'):
-                self.checkBox_IncludeName.setChecked(include_name)
             if hasattr(self, 'checkBox_IncludeTransit'):
                 self.checkBox_IncludeTransit.setChecked(include_transit)
             
+            # Load export prefix
+            export_prefix = settings.value(f'{SETTINGS_KEY}/ExportPrefix', 'W15', type=str)
+            if hasattr(self, 'exportPrefixInput'):
+                self.exportPrefixInput.setText(export_prefix)
+            
             # Load field selectors
             id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
-            name_field = settings.value(f'{SETTINGS_KEY}/NameField', '', type=str)
             
             id_sel = self._get_id_selector()
-            name_sel = self._get_name_selector()
             
             if id_field and id_sel is not None:
                 self._try_set_selector_by_name(id_sel, id_field)
-            if name_field and name_sel is not None:
-                self._try_set_selector_by_name(name_sel, name_field)
+            
+            # Load POI layer
+            poi_layer_id = settings.value(f'{SETTINGS_KEY}/POILayerId', '', type=str)
+            poi_layer_widget = getattr(self, 'poiLayer', None)
+            if poi_layer_id and poi_layer_widget is not None and QgsProject is not None:
+                try:
+                    poi_layer = QgsProject.instance().mapLayer(poi_layer_id)
+                    if poi_layer and hasattr(poi_layer_widget, 'setLayer'):
+                        poi_layer_widget.setLayer(poi_layer)
+                except Exception:
+                    pass
+            
+            # Load POI attribute selectors
+            poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
+            poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
+            
+            poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
+            poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+            
+            if poi_grid_id_field and poi_grid_id_sel is not None:
+                self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
+            if poi_group_attr_field and poi_group_attr_sel is not None:
+                self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
             
             self._log("Loaded combined model settings")
         except Exception as e:
@@ -543,21 +630,14 @@ class POICombinedReach(QDialog, FORM_CLASS):
             # Try to get saved field names from QSettings
             settings = QSettings()
             saved_id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
-            saved_name_field = settings.value(f'{SETTINGS_KEY}/NameField', '', type=str)
             
             # Use saved field if it exists in this layer, otherwise use first field
             if saved_id_field and saved_id_field in field_names:
                 id_field_name = saved_id_field
             elif fields:
                 id_field_name = fields[0].name()
-            
-            if saved_name_field and saved_name_field in field_names:
-                name_field_name = saved_name_field
-            elif fields:
-                name_field_name = fields[0].name()
 
         id_sel = self._get_id_selector()
-        name_sel = self._get_name_selector()
         
         if id_sel is not None and id_field_name:
             try:
@@ -565,14 +645,6 @@ class POICombinedReach(QDialog, FORM_CLASS):
                     id_sel.setCurrentField(id_field_name)
                 else:
                     self._try_set_selector_by_name(id_sel, id_field_name)
-            except Exception:
-                pass
-        if name_sel is not None and name_field_name:
-            try:
-                if hasattr(name_sel, 'setCurrentField'):
-                    name_sel.setCurrentField(name_field_name)
-                else:
-                    self._try_set_selector_by_name(name_sel, name_field_name)
             except Exception:
                 pass
 
@@ -607,18 +679,49 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 id_sel.currentIndexChanged.connect(self._id_selector_conn)
         except Exception:
             pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
-                def _name_handler(_idx, lid=lid):
-                    try:
-                        self._save_current_selection(lid)
-                    except Exception:
-                        pass
-                self._name_selector_conn = _name_handler
-                name_sel.currentIndexChanged.connect(self._name_selector_conn)
-        except Exception:
-            pass
+
+    def updatePOILayer(self, layer):
+        """Update POI attribute selectors when POI layer changes."""
+        if layer is None:
+            poi_layer_widget = getattr(self, 'poiLayer', None)
+            if poi_layer_widget is not None and hasattr(poi_layer_widget, 'currentLayer'):
+                try:
+                    layer = poi_layer_widget.currentLayer()
+                except Exception:
+                    layer = None
+
+        poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
+        poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+
+        # Set layer for selectors
+        if poi_grid_id_sel is not None and hasattr(poi_grid_id_sel, 'setLayer'):
+            try:
+                poi_grid_id_sel.setLayer(layer)
+            except Exception:
+                pass
+        if poi_group_attr_sel is not None and hasattr(poi_group_attr_sel, 'setLayer'):
+            try:
+                poi_group_attr_sel.setLayer(layer)
+            except Exception:
+                pass
+        
+        self._log(f"updatePOILayer: set to {layer.name() if layer else 'None'}")
+
+        # Try to restore previously saved selections for this layer
+        if layer is not None:
+            settings = QSettings()
+            try:
+                poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
+                poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
+                
+                if poi_grid_id_field and poi_grid_id_sel is not None:
+                    self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
+                if poi_group_attr_field and poi_group_attr_sel is not None:
+                    self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
+                
+                self._log(f"Restored POI attributes: grid_id={poi_grid_id_field}, group_attr={poi_group_attr_field}")
+            except Exception as e:
+                self._log(f"Error restoring POI attributes: {str(e)}", level='debug')
 
     def Evaluate(self, max_features=100):
 
@@ -697,7 +800,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
         self.labelCurrentStatus.setText("Collect origins and destinations..")
         self.repaint()
 
-        origins, destinations, selection = sub_collectODs(self, name_field=self.nameSelector.currentText(), id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
+        origins, destinations, selection = sub_collectODs(self, name_field=None, id_field=self.idSelector.currentText(), use_name=False)
 
         # origins are selected features, destinations are all features (or selected if option is checked)
         step_start = time.time()
@@ -901,8 +1004,7 @@ def sub_Export_GeoJSON(self, ODM, origins):
     step_start = time.time()
     feature_data = {}  # Maps feature_id -> {attr: value}
     id_field_name = self.idSelector.currentText()
-    name_field_name = self.nameSelector.currentText()
-    self._log(f"Using ID field: {id_field_name}, Name field: {name_field_name}")
+    self._log(f"Using ID field: {id_field_name}")
     
     data_lookups = 0
     distance_values_set = 0
