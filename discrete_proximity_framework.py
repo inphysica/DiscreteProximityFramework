@@ -6,6 +6,7 @@ from .activeodm_distancemap_dialog import ActiveODMDistanceMapDialog
 from .combinedodm_distancemap_dialog import CombinedODMDistanceMapDialog
 from .combinedreach_analysis_dialog import CombinedReachAnalysisDialog
 from .poi_combined_reach_dialog import POICombinedReach
+from .odm_reach_dialog import ODMReachDialog
 
 from qgis.core import QgsMessageLog, Qgis
 
@@ -21,6 +22,7 @@ class DiscreteProximityFramework:
         self.action = None
         self.multimodal_action = None
         self.POICombinedReach = None
+        self.ODMReach = None
 
     def tr(self, message):
         return QCoreApplication.translate('DiscreteProximityFramework', message)
@@ -63,6 +65,22 @@ class DiscreteProximityFramework:
 
         try:
             self.iface.addToolBarIcon(self.CombinedDistanceMap)
+        except Exception:
+            # Older/newer QGIS may differ; ignore if toolbar API not present
+            pass
+
+        # ODM Reach action
+        icon_path = os.path.join(os.path.dirname(__file__), "icons", "Reach.png")
+        self.ODMReach = QAction(QIcon(icon_path), self.tr('ODM Reach'), self.iface.mainWindow())
+        self.ODMReach.setObjectName('actionODMReach')
+        self.ODMReach.setToolTip(self.tr('Run ODM Reach Analysis'))
+        self.ODMReach.triggered.connect(self.run_odm_reach)
+
+        # Add to Plugins menu
+        self.iface.addPluginToMenu(self.tr('&Discrete Proximity Framework'), self.ODMReach)
+
+        try:
+            self.iface.addToolBarIcon(self.ODMReach)
         except Exception:
             # Older/newer QGIS may differ; ignore if toolbar API not present
             pass
@@ -121,6 +139,15 @@ class DiscreteProximityFramework:
                 self.iface.removeToolBarIcon(self.CombinedDistanceMap)
             except Exception:
                 pass
+        if self.ODMReach:
+            try:
+                self.iface.removePluginMenu(self.tr('&Discrete Proximity Framework'), self.ODMReach)
+            except Exception:
+                pass
+            try:
+                self.iface.removeToolBarIcon(self.ODMReach)
+            except Exception:
+                pass
         # if self.CombinedReach:
         #     try:
         #         self.iface.removePluginMenu(self.tr('&Discrete Proximity Framework'), self.CombinedReach)
@@ -148,6 +175,11 @@ class DiscreteProximityFramework:
     def run_combinedodm_distancemap(self):
         """Handler for 'Multimodal_DistanceMap' action."""
         dialog = CombinedODMDistanceMapDialog(self.iface.mainWindow(), iface=self.iface)
+        result = dialog.exec_()
+
+    def run_odm_reach(self):
+        """Handler for 'ODM Reach' action."""
+        dialog = ODMReachDialog(self.iface.mainWindow(), iface=self.iface)
         result = dialog.exec_()
 
     # def run_combinedreach(self):

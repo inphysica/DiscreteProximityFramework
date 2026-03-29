@@ -95,7 +95,7 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
             try:
                 for lay in QgsProject.instance().mapLayers().values():
                     try:
-                        self.layer_field_map.setdefault(lay.id(), {'id_field': None})
+                        self.layer_field_map.setdefault(lay.id(), {'id_field': None, 'name_field': None})
                     except Exception:
                         continue
             except Exception:
@@ -119,21 +119,6 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
 
         QTimer.singleShot(0, lambda: self.updateLayer(None))
 
-        # connect POI layer widget signals
-        poi_layer_widget = getattr(self, 'poiLayer', None)
-        if poi_layer_widget is not None:
-            for sig in ('currentLayerChanged', 'layerChanged', 'sourceLayerChanged', 'currentIndexChanged'):
-                if hasattr(poi_layer_widget, sig):
-                    try:
-                        if sig == 'currentIndexChanged':
-                            poi_layer_widget.currentIndexChanged.connect(lambda _idx: self.updatePOILayer(None))
-                        else:
-                            getattr(poi_layer_widget, sig).connect(self.updatePOILayer)
-                    except Exception:
-                        continue
-                    break
-        
-        QTimer.singleShot(100, lambda: self.updatePOILayer(None))
         try:
             if hasattr(self, 'buttonBox'):
                 try:
@@ -158,8 +143,6 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         settings.setValue(f'{SETTINGS_KEY}/MaxWalkStation', self.maxWalkStation.value())
         settings.setValue(f'{SETTINGS_KEY}/MaxTotalTime', self.maxTotalTime.value())
         settings.setValue(f'{SETTINGS_KEY}/WalkingSpeed', self.walkingSpeed.value())
-        settings.setValue(f'{SETTINGS_KEY}/DecayPlatoo', self.decayPlatoo.value())
-        settings.setValue(f'{SETTINGS_KEY}/HalfDecayDuration', self.halfDecayDuration.value())
         settings.setValue(f'{SETTINGS_KEY}/IncludeTransit', self.checkBox_IncludeTransit.isChecked())
 
         # Save settings
@@ -245,46 +228,24 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
             settings.setValue(f'{SETTINGS_KEY}/MaxWalkStation', self.maxWalkStation.value())
             settings.setValue(f'{SETTINGS_KEY}/MaxTotalTime', self.maxTotalTime.value())
             settings.setValue(f'{SETTINGS_KEY}/WalkingSpeed', self.walkingSpeed.value())
-            settings.setValue(f'{SETTINGS_KEY}/DecayPlatoo', self.decayPlatoo.value())
-            settings.setValue(f'{SETTINGS_KEY}/HalfDecayDuration', self.halfDecayDuration.value())
             
             # Save checkboxes
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', 
                             self.onlySelectedFeatures.isChecked())
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeTransit',
                             self.checkBox_IncludeTransit.isChecked())
-            
-            # Save export prefix
-            export_prefix_input = getattr(self, 'exportPrefixInput', None)
-            if export_prefix_input is not None:
-                settings.setValue(f'{SETTINGS_KEY}/ExportPrefix', export_prefix_input.text())
+            settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeName',
+                            self.checkBox_IncludeName.isChecked())
             
             # Save field selectors
             id_sel = self._get_id_selector()
+            name_sel = self._get_name_selector()
             id_field = self._get_current_field(id_sel)
+            name_field = self._get_current_field(name_sel)
             if id_field:
                 settings.setValue(f'{SETTINGS_KEY}/IdField', id_field)
-            
-            # Save POI layer and selectors
-            poi_layer = getattr(self, 'poiLayer', None)
-            if poi_layer is not None and hasattr(poi_layer, 'currentLayer'):
-                try:
-                    poi = poi_layer.currentLayer()
-                    if poi:
-                        settings.setValue(f'{SETTINGS_KEY}/POILayerId', poi.id())
-                except Exception:
-                    pass
-            
-            poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
-            poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
-            if poi_grid_id_sel is not None:
-                poi_grid_id_field = self._get_current_field(poi_grid_id_sel)
-                if poi_grid_id_field:
-                    settings.setValue(f'{SETTINGS_KEY}/POIGridIdNameField', poi_grid_id_field)
-            if poi_group_attr_sel is not None:
-                poi_group_attr_field = self._get_current_field(poi_group_attr_sel)
-                if poi_group_attr_field:
-                    settings.setValue(f'{SETTINGS_KEY}/POIGroupAttrField', poi_group_attr_field)
+            if name_field:
+                settings.setValue(f'{SETTINGS_KEY}/NameField', name_field)
             
             self._log("Saved combined model settings")
         except Exception as e:
@@ -297,47 +258,26 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
             # Load checkboxes
             only_selected = settings.value(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', False, type=bool)
             include_transit = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeTransit', True, type=bool)
+            include_name = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeName', False, type=bool)
             
             if hasattr(self, 'onlySelectedFeatures'):
                 self.onlySelectedFeatures.setChecked(only_selected)
             if hasattr(self, 'checkBox_IncludeTransit'):
                 self.checkBox_IncludeTransit.setChecked(include_transit)
-            
-            # Load export prefix
-            export_prefix = settings.value(f'{SETTINGS_KEY}/ExportPrefix', 'W15', type=str)
-            if hasattr(self, 'exportPrefixInput'):
-                self.exportPrefixInput.setText(export_prefix)
+            if hasattr(self, 'checkBox_IncludeName'):
+                self.checkBox_IncludeName.setChecked(include_name)
             
             # Load field selectors
             id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
+            name_field = settings.value(f'{SETTINGS_KEY}/NameField', '', type=str)
             
             id_sel = self._get_id_selector()
+            name_sel = self._get_name_selector()
             
             if id_field and id_sel is not None:
                 self._try_set_selector_by_name(id_sel, id_field)
-            
-            # Load POI layer
-            poi_layer_id = settings.value(f'{SETTINGS_KEY}/POILayerId', '', type=str)
-            poi_layer_widget = getattr(self, 'poiLayer', None)
-            if poi_layer_id and poi_layer_widget is not None and QgsProject is not None:
-                try:
-                    poi_layer = QgsProject.instance().mapLayer(poi_layer_id)
-                    if poi_layer and hasattr(poi_layer_widget, 'setLayer'):
-                        poi_layer_widget.setLayer(poi_layer)
-                except Exception:
-                    pass
-            
-            # Load POI attribute selectors
-            poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
-            poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
-            
-            poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
-            poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
-            
-            if poi_grid_id_field and poi_grid_id_sel is not None:
-                self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
-            if poi_group_attr_field and poi_group_attr_sel is not None:
-                self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
+            if name_field and name_sel is not None:
+                self._try_set_selector_by_name(name_sel, name_field)
             
             self._log("Loaded combined model settings")
         except Exception as e:
@@ -481,15 +421,11 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         max_walk_station = settings.value(f'{SETTINGS_KEY}/MaxWalkStation', 15.0, type=float)  # minutes
         max_total_time = settings.value(f'{SETTINGS_KEY}/MaxTotalTime', 60.0, type=float)  # minutes
         walking_speed = settings.value(f'{SETTINGS_KEY}/WalkingSpeed', 4.5, type=float)  # km/h
-        decay_platoo = settings.value(f'{SETTINGS_KEY}/DecayPlatoo', 10.0, type=float)  # minutes
-        half_decay_duration = settings.value(f'{SETTINGS_KEY}/HalfDecayDuration', 5.0, type=float)  # minutes
 
         self.maxWalkDest.setValue(max_walk_dest)
         self.maxWalkStation.setValue(max_walk_station)
         self.maxTotalTime.setValue(max_total_time)
         self.walkingSpeed.setValue(walking_speed)
-        self.decayPlatoo.setValue(decay_platoo)
-        self.halfDecayDuration.setValue(half_decay_duration)
         
         # Load other settings
         self.load_settings()
@@ -598,14 +534,21 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
             # Try to get saved field names from QSettings
             settings = QSettings()
             saved_id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
+            saved_name_field = settings.value(f'{SETTINGS_KEY}/NameField', '', type=str)
             
             # Use saved field if it exists in this layer, otherwise use first field
             if saved_id_field and saved_id_field in field_names:
                 id_field_name = saved_id_field
             elif fields:
                 id_field_name = fields[0].name()
+            
+            if saved_name_field and saved_name_field in field_names:
+                name_field_name = saved_name_field
+            elif fields:
+                name_field_name = fields[0].name()
 
         id_sel = self._get_id_selector()
+        name_sel = self._get_name_selector()
         
         if id_sel is not None and id_field_name:
             try:
@@ -613,6 +556,15 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
                     id_sel.setCurrentField(id_field_name)
                 else:
                     self._try_set_selector_by_name(id_sel, id_field_name)
+            except Exception:
+                pass
+        
+        if name_sel is not None and name_field_name:
+            try:
+                if hasattr(name_sel, 'setCurrentField'):
+                    name_sel.setCurrentField(name_field_name)
+                else:
+                    self._try_set_selector_by_name(name_sel, name_field_name)
             except Exception:
                 pass
 
@@ -647,49 +599,18 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
                 id_sel.currentIndexChanged.connect(self._id_selector_conn)
         except Exception:
             pass
-
-    def updatePOILayer(self, layer):
-        """Update POI attribute selectors when POI layer changes."""
-        if layer is None:
-            poi_layer_widget = getattr(self, 'poiLayer', None)
-            if poi_layer_widget is not None and hasattr(poi_layer_widget, 'currentLayer'):
-                try:
-                    layer = poi_layer_widget.currentLayer()
-                except Exception:
-                    layer = None
-
-        poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
-        poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
-
-        # Set layer for selectors
-        if poi_grid_id_sel is not None and hasattr(poi_grid_id_sel, 'setLayer'):
-            try:
-                poi_grid_id_sel.setLayer(layer)
-            except Exception:
-                pass
-        if poi_group_attr_sel is not None and hasattr(poi_group_attr_sel, 'setLayer'):
-            try:
-                poi_group_attr_sel.setLayer(layer)
-            except Exception:
-                pass
-        
-        self._log(f"updatePOILayer: set to {layer.name() if layer else 'None'}")
-
-        # Try to restore previously saved selections for this layer
-        if layer is not None:
-            settings = QSettings()
-            try:
-                poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
-                poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
-                
-                if poi_grid_id_field and poi_grid_id_sel is not None:
-                    self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
-                if poi_group_attr_field and poi_group_attr_sel is not None:
-                    self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
-                
-                self._log(f"Restored POI attributes: grid_id={poi_grid_id_field}, group_attr={poi_group_attr_field}")
-            except Exception as e:
-                self._log(f"Error restoring POI attributes: {str(e)}", level='debug')
+        try:
+            if name_sel is not None and hasattr(name_sel, 'currentIndexChanged'):
+                lid = self.current_layer_id
+                def _name_handler(_idx, lid=lid):
+                    try:
+                        self._save_current_selection(lid)
+                    except Exception:
+                        pass
+                self._name_selector_conn = _name_handler
+                name_sel.currentIndexChanged.connect(self._name_selector_conn)
+        except Exception:
+            pass
 
     def Evaluate(self, max_features=100):
 
@@ -768,7 +689,13 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         self.labelCurrentStatus.setText("Collect origins and destinations..")
         self.repaint()
 
-        origins, destinations, selection = sub_collectODs(self, name_field=None, id_field=self.idSelector.currentText(), use_name=False)
+        # Get name field if "Include Name" is checked
+        name_field = None
+        if self.checkBox_IncludeName.isChecked():
+            name_sel = self._get_name_selector()
+            name_field = self._get_current_field(name_sel)
+
+        origins, destinations, selection = sub_collectODs(self, name_field=name_field, id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
 
         # origins are selected features, destinations are all features (or selected if option is checked)
         step_start = time.time()
@@ -839,6 +766,10 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
             max_walking_duration=self.maxWalkStation.value(),
             max_direct_walking_duration=self.maxWalkDest.value(),
             bar=self.progressBar)
+
+
+        self._log(f"Built combined distance map with {len(ODM)} origins")
+
 
         self.labelCurrentStatus.setText("Combined distance map built.")
         self.repaint()
@@ -931,10 +862,6 @@ def sub_collectODs(self, name_field, id_field, use_name=True, bar=None):
 
 
     return origins, destinations, selection
-
-
-
-
 
 def sub_Export_GeoJSON(self, ODM, origins):
     """

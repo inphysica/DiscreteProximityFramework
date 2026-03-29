@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>750</width>
-    <height>700</height>
+    <height>480</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -61,73 +61,6 @@
      </item>
      <item>
       <widget class="QgsFieldComboBox" name="idSelector"/>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="Line" name="line_id_separator">
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_POILayer">
-     <item>
-      <widget class="QLabel" name="label_poi_layer">
-       <property name="minimumWidth">
-        <number>190</number>
-       </property>
-       <property name="maximumWidth">
-        <number>190</number>
-       </property>
-       <property name="text">
-        <string>POI Layer</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QgsMapLayerComboBox" name="poiLayer"/>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_GridIdName">
-     <item>
-      <widget class="QLabel" name="label_grid_id_name">
-       <property name="minimumWidth">
-        <number>190</number>
-       </property>
-       <property name="maximumWidth">
-        <number>190</number>
-       </property>
-       <property name="text">
-        <string>Grid ID Name</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QgsFieldComboBox" name="poiGridIdNameSelector"/>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_GroupAttr">
-     <item>
-      <widget class="QLabel" name="label_group_attr">
-       <property name="minimumWidth">
-        <number>190</number>
-       </property>
-       <property name="maximumWidth">
-        <number>190</number>
-       </property>
-       <property name="text">
-        <string>Group Attribute Name</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QgsFieldComboBox" name="poiGroupAttrSelector"/>
      </item>
     </layout>
    </item>
@@ -216,7 +149,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>240</height>
+       <height>140</height>
       </size>
      </property>
      <property name="font">
@@ -226,7 +159,7 @@
       </font>
      </property>
      <property name="title">
-      <string>Constraints</string>
+      <string>Options</string>
      </property>
      <widget class="QLabel" name="label_5">
       <property name="geometry">
@@ -356,75 +289,11 @@
        <double>60.000000000000000</double>
       </property>
      </widget>
-     <widget class="QLabel" name="label_decay_platoo">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>140</y>
-        <width>150</width>
-        <height>30</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Decay platoo (min)</string>
-      </property>
-     </widget>
-     <widget class="QgsDoubleSpinBox" name="decayPlatoo">
-      <property name="geometry">
-       <rect>
-        <x>190</x>
-        <y>145</y>
-        <width>150</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="decimals">
-       <number>1</number>
-      </property>
-      <property name="maximum">
-       <double>1440.000000000000000</double>
-      </property>
-      <property name="value">
-       <double>10.000000000000000</double>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_half_decay">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>170</y>
-        <width>150</width>
-        <height>30</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Half decay duration (min)</string>
-      </property>
-     </widget>
-     <widget class="QgsDoubleSpinBox" name="halfDecayDuration">
-      <property name="geometry">
-       <rect>
-        <x>190</x>
-        <y>175</y>
-        <width>150</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="decimals">
-       <number>1</number>
-      </property>
-      <property name="maximum">
-       <double>1440.000000000000000</double>
-      </property>
-      <property name="value">
-       <double>5.000000000000000</double>
-      </property>
-     </widget>
      <widget class="QCheckBox" name="checkBox_IncludeTransit">
       <property name="geometry">
        <rect>
         <x>10</x>
-        <y>200</y>
+        <y>140</y>
         <width>200</width>
         <height>30</height>
        </rect>
@@ -439,9 +308,9 @@
     </widget>
    </item>
    <item>
-    <widget class="QgsCollapsibleGroupBox" name="mGroupBox_Options">
+    <widget class="QgsCollapsibleGroupBox" name="mGroupBox">
      <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+      <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
@@ -449,7 +318,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>50</height>
+       <height>75</height>
       </size>
      </property>
      <property name="font">
@@ -459,34 +328,47 @@
       </font>
      </property>
      <property name="title">
-      <string>Export</string>
+      <string>Results</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_Options">
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_prefix">
-        <item>
-         <widget class="QLabel" name="label_prefix">
-          <property name="minimumWidth">
-           <number>190</number>
-          </property>
-          <property name="maximumWidth">
-           <number>190</number>
-          </property>
-          <property name="text">
-           <string>Prefix</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="exportPrefixInput">
-          <property name="text">
-           <string>W15</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-     </layout>
+     <widget class="QCheckBox" name="checkBox_IncludeName">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>25</y>
+        <width>201</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Include Name </string>
+      </property>
+      <property name="checked">
+       <bool>false</bool>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_4">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>50</y>
+        <width>184</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Name attribute</string>
+      </property>
+     </widget>
+     <widget class="QgsFieldComboBox" name="nameSelector">
+      <property name="geometry">
+       <rect>
+        <x>194</x>
+        <y>50</y>
+        <width>281</width>
+        <height>20</height>
+       </rect>
+      </property>
+     </widget>
     </widget>
    </item>
    <item>

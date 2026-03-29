@@ -49,10 +49,9 @@ class ODMReachDialog(QDialog, FORM_CLASS):
     def __init__(self, parent=None, iface=None):
         super().__init__(parent)
         self.iface = iface
-        self.layer_field_map = {}  # layer_id -> {'id_field': str, 'name_field': str}
+        self.layer_field_map = {}  # layer_id -> {'id_field': str}
         self.current_layer_id = None
         self._id_selector_conn = None
-        self._name_selector_conn = None
 
         self.setupUi(self)
 
@@ -61,7 +60,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             try:
                 for lay in QgsProject.instance().mapLayers().values():
                     try:
-                        self.layer_field_map.setdefault(lay.id(), {'id_field': None, 'name_field': None})
+                        self.layer_field_map.setdefault(lay.id(), {'id_field': None})
                     except Exception:
                         continue
             except Exception:
@@ -195,23 +194,14 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         settings = QSettings()
         try:
             # Save checkboxes
-            settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_ResultDistance', 
-                            self.checkBox_ResultDistance.isChecked())
-            settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_ResultDuration', 
-                            self.checkBox_ResultDuration.isChecked())
-            settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_IncludeName', 
-                            self.checkBox_IncludeName.isChecked())
             settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_OnlySelectedFeatures', 
                             self.onlySelectedFeatures.isChecked())
             
             # Save field selectors
-            id_sel, name_sel = self._get_selector()
+            id_sel = self._get_id_selector()
             id_field = self._get_current_field(id_sel)
-            name_field = self._get_current_field(name_sel)
             if id_field:
                 settings.setValue('DiscreteProximityFramework/ODMReach_IdField', id_field)
-            if name_field:
-                settings.setValue('DiscreteProximityFramework/ODMReach_NameField', name_field)
             
             self._log("Saved settings")
         except Exception as e:
@@ -222,32 +212,20 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         settings = QSettings()
         try:
             # Load checkboxes with sensible defaults
-            result_distance = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_ResultDistance', True, type=bool)
-            result_duration = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_ResultDuration', True, type=bool)
-            include_name = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_IncludeName', True, type=bool)
             only_selected = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_OnlySelectedFeatures', False, type=bool)
             
             # Apply checkbox settings
-            if hasattr(self, 'checkBox_ResultDistance'):
-                self.checkBox_ResultDistance.setChecked(result_distance)
-            if hasattr(self, 'checkBox_ResultDuration'):
-                self.checkBox_ResultDuration.setChecked(result_duration)
-            if hasattr(self, 'checkBox_IncludeName'):
-                self.checkBox_IncludeName.setChecked(include_name)
             if hasattr(self, 'onlySelectedFeatures'):
                 self.onlySelectedFeatures.setChecked(only_selected)
             
             # Load field selectors
             id_field = settings.value('DiscreteProximityFramework/ODMReach_IdField', '', type=str)
-            name_field = settings.value('DiscreteProximityFramework/ODMReach_NameField', '', type=str)
             
-            id_sel, name_sel = self._get_selector()
+            id_sel = self._get_id_selector()
             
             # Try to set saved field selections
             if id_field and id_sel is not None:
                 self._try_set_selector_by_name(id_sel, id_field)
-            if name_field and name_sel is not None:
-                self._try_set_selector_by_name(name_sel, name_field)
             
             self._log("Loaded settings")
         except Exception as e:
@@ -258,11 +236,10 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             layer_id = self.current_layer_id
         if not layer_id:
             return
-        id_sel, name_sel = self._get_selector()
+        id_sel = self._get_id_selector()
         id_field = self._get_current_field(id_sel)
-        name_field = self._get_current_field(name_sel)
-        self.layer_field_map[layer_id] = {'id_field': id_field, 'name_field': name_field}
-        self._log(f"Saved mapping for {layer_id}: id_field={id_field}, name_field={name_field}")
+        self.layer_field_map[layer_id] = {'id_field': id_field}
+        self._log(f"Saved mapping for {layer_id}: id_field={id_field}")
 
     def _try_set_selector_by_name(self, selector, field_name):
         if selector is None or not field_name:
@@ -289,12 +266,10 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         data = self.layer_field_map.get(layer_id)
         if not data:
             return False
-        id_sel, name_sel = self._get_selector()
+        id_sel = self._get_id_selector()
         restored = False
         if id_sel is not None and data.get('id_field'):
             restored = self._try_set_selector_by_name(id_sel, data.get('id_field')) or restored
-        if name_sel is not None and data.get('name_field'):
-            restored = self._try_set_selector_by_name(name_sel, data.get('name_field')) or restored
 
         if not restored and QgsProject is not None:
             # schedule a retry after UI finishes populating
@@ -311,8 +286,6 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                     fields = []
                 if id_sel is not None and data.get('id_field') in fields:
                     self._try_set_selector_by_name(id_sel, data.get('id_field'))
-                if name_sel is not None and data.get('name_field') in fields:
-                    self._try_set_selector_by_name(name_sel, data.get('name_field'))
             try:
                 QTimer.singleShot(0, retry)
             except Exception:
@@ -358,9 +331,12 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             pass
 
     def _get_selector(self):
-        """Return tuple (id_selector, name_selector) trying common names."""
-        return (getattr(self, 'IdFieldSelector', None) or getattr(self, 'idSelector', None),
-                getattr(self, 'NameFieldSelector', None) or getattr(self, 'nameSelector', None))
+        """Return id_selector trying common names."""
+        return getattr(self, 'IdFieldSelector', None) or getattr(self, 'idSelector', None)
+
+    def _get_id_selector(self):
+        """Return id selector."""
+        return getattr(self, 'IdFieldSelector', None) or getattr(self, 'idSelector', None)
 
     def _get_current_field(self, selector):
         if selector is None:
@@ -467,7 +443,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                 except Exception:
                     layer = None
 
-        id_sel, name_sel = self._get_selector()
+        id_sel = self._get_id_selector()
 
         # disconnect previous handlers
         try:
@@ -478,58 +454,13 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                     pass
         except Exception:
             pass
-        try:
-            if name_sel is not None and self._name_selector_conn is not None:
-                try:
-                    name_sel.currentIndexChanged.disconnect(self._name_selector_conn)
-                except Exception:
-                    pass
-        except Exception:
-            pass
 
-        # set preview widgets' layer if present
-        id_feat = getattr(self, 'IdFeature', None)
-        name_feat = getattr(self, 'NameFeature', None)
-        if id_feat is not None and hasattr(id_feat, 'setLayer'):
-            id_feat.setLayer(layer)
-        if name_feat is not None and hasattr(name_feat, 'setLayer'):
-            name_feat.setLayer(layer)
-
-        # block signals while we programmatically change selectors
-        try:
-            if id_sel is not None and hasattr(id_sel, 'blockSignals'):
-                id_sel.blockSignals(True)
-        except Exception:
-            pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'blockSignals'):
-                name_sel.blockSignals(True)
-        except Exception:
-            pass
-
-        # if selectors support setLayer, try to set it
-        try:
-            if id_sel is not None and hasattr(id_sel, 'setLayer'):
+        # Set layer for selectors
+        if id_sel is not None and hasattr(id_sel, 'setLayer'):
+            try:
                 id_sel.setLayer(layer)
-        except Exception:
-            pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'setLayer'):
-                name_sel.setLayer(layer)
-        except Exception:
-            pass
-
-        # unblock signals
-        try:
-            if id_sel is not None and hasattr(id_sel, 'blockSignals'):
-                id_sel.blockSignals(False)
-        except Exception:
-            pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'blockSignals'):
-                name_sel.blockSignals(False)
-        except Exception:
-            pass
+            except Exception:
+                pass
 
         try:
             self.current_layer_id = layer.id() if layer is not None and hasattr(layer, 'id') else None
@@ -561,33 +492,14 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                 id_sel.currentIndexChanged.connect(self._id_selector_conn)
         except Exception:
             pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
-                def _name_handler(_idx, lid=lid):
-                    self._save_current_selection(lid)
-                self._name_selector_conn = _name_handler
-                name_sel.currentIndexChanged.connect(self._name_selector_conn)
-        except Exception:
-            pass
-
-        try:
-            self.updateFeatureDisplays()
-        except Exception:
-            pass
 
     def updateFeatureDisplays(self, *args):
-        id_sel, name_sel = self._get_selector()
+        id_sel = self._get_id_selector()
         id_field = self._get_current_field(id_sel)
-        name_field = self._get_current_field(name_sel)
 
         id_feat = getattr(self, 'IdFeature', None)
         if id_feat is not None and hasattr(id_feat, 'setDisplayExpression'):
             id_feat.setDisplayExpression(f'"{id_field}"' if id_field else '$id')
-
-        name_feat = getattr(self, 'NameFeature', None)
-        if name_feat is not None and hasattr(name_feat, 'setDisplayExpression'):
-            name_feat.setDisplayExpression(f'"{name_field}"' if name_field else '$id')
 
     def populate_defaults(self):
         layer_widget = getattr(self, 'inputLayer', None)
@@ -599,7 +511,6 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                 layer = None
 
         id_field_name = None
-        name_field_name = None
         if layer is not None:
             try:
                 fields = list(layer.fields())
@@ -611,34 +522,21 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             # Try to get saved field names from QSettings
             settings = QSettings()
             saved_id_field = settings.value('DiscreteProximityFramework/ODMReach_IdField', '', type=str)
-            saved_name_field = settings.value('DiscreteProximityFramework/ODMReach_NameField', '', type=str)
             
             # Use saved field if it exists in this layer, otherwise use first field
             if saved_id_field and saved_id_field in field_names:
                 id_field_name = saved_id_field
             elif fields:
                 id_field_name = fields[0].name()
-            
-            if saved_name_field and saved_name_field in field_names:
-                name_field_name = saved_name_field
-            elif fields:
-                name_field_name = fields[0].name()
 
-        id_sel, name_sel = self._get_selector()
+        id_sel = self._get_id_selector()
+        
         if id_sel is not None and id_field_name:
             try:
                 if hasattr(id_sel, 'setCurrentField'):
                     id_sel.setCurrentField(id_field_name)
                 else:
                     self._try_set_selector_by_name(id_sel, id_field_name)
-            except Exception:
-                pass
-        if name_sel is not None and name_field_name:
-            try:
-                if hasattr(name_sel, 'setCurrentField'):
-                    name_sel.setCurrentField(name_field_name)
-                else:
-                    self._try_set_selector_by_name(name_sel, name_field_name)
             except Exception:
                 pass
 
@@ -673,18 +571,6 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                 id_sel.currentIndexChanged.connect(self._id_selector_conn)
         except Exception:
             pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
-                def _name_handler(_idx, lid=lid):
-                    try:
-                        self._save_current_selection(lid)
-                    except Exception:
-                        pass
-                self._name_selector_conn = _name_handler
-                name_sel.currentIndexChanged.connect(self._name_selector_conn)
-        except Exception:
-            pass
 
         self.updateFeatureDisplays()
 
@@ -697,15 +583,6 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         self.repaint()
 
         src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
-
-        if self.checkBox_ResultDistance.isChecked() == False and self.checkBox_ResultDuration.isChecked() == False:
-            QMessageBox.critical(
-                self.iface.mainWindow(),
-                "No output selected",
-                "You have not selected any output (distance and/or duration). Please select at least one output option.",
-                QMessageBox.Ok
-            )
-            return False
 
 
         if (self.onlySelectedFeatures.isChecked() == True):
@@ -770,7 +647,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         self.repaint()
 
         step_start = time.time()
-        origins, selection = sub_collectPairs(self, name_field=self.nameSelector.currentText(), id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
+        origins, selection = sub_collectPairs(self, id_field=self.idSelector.currentText(), use_name=False)
         step_duration = time.time() - step_start
         self._log(f"Collected {len(origins)} origins in {step_duration:.3f}s")
 
@@ -829,7 +706,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         return True
 
 
-def sub_collectPairs(self, name_field, id_field, use_name=True):
+def sub_collectPairs(self, id_field, use_name=False):
 
     src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
 
@@ -958,12 +835,10 @@ def sub_Export(self, distancemap, origins):
         id_ = origin[0]
         name = origin[1]
 
-        if self.checkBox_ResultDistance.isChecked():
-            new_field = QgsField(f"from_{name}_Distance", QVariant.Double)
-            mem_layer.addAttribute(new_field)
-        if self.checkBox_ResultDuration.isChecked():
-            new_field = QgsField(f"from_{name}_Duration", QVariant.Double)
-            mem_layer.addAttribute(new_field)
+        new_field = QgsField(f"from_{name}_Distance", QVariant.Double)
+        mem_layer.addAttribute(new_field)
+        new_field = QgsField(f"from_{name}_Duration", QVariant.Double)
+        mem_layer.addAttribute(new_field)
 
     mem_layer.updateFields()
     mem_layer.commitChanges()
@@ -1007,10 +882,8 @@ def sub_Export(self, distancemap, origins):
                     result_distance = distance
                     result_duration = duration
 
-            if self.checkBox_ResultDistance.isChecked():
-                f[f"from_{name}_Distance"] = result_distance # convert to km
-            if self.checkBox_ResultDuration.isChecked():
-                f[f"from_{name}_Duration"] = result_duration  # in minutes
+            f[f"from_{name}_Distance"] = result_distance # convert to km
+            f[f"from_{name}_Duration"] = result_duration  # in minutes
 
             mem_layer.updateFeature(f)
 
@@ -1059,8 +932,7 @@ def sub_Export_GeoJSON(self, distancemap, origins):
     step_start = time.time()
     feature_data = {}  # Maps feature_id -> {attr: value}
     id_field_name = self.idSelector.currentText()
-    name_field_name = self.nameSelector.currentText()
-    self._log(f"Using ID field: {id_field_name}, Name field: {name_field_name}")
+    self._log(f"Using ID field: {id_field_name}")
     
     data_lookups = 0
     distance_values_set = 0
@@ -1097,12 +969,10 @@ def sub_Export_GeoJSON(self, distancemap, origins):
                 result_duration = duration
                 data_lookups += 1
 
-            if self.checkBox_ResultDistance.isChecked():
-                feat_attrs[f"from_{name}_Distance"] = result_distance
-                distance_values_set += 1
-            if self.checkBox_ResultDuration.isChecked():
-                feat_attrs[f"from_{name}_Duration"] = result_duration
-                distance_values_set += 1
+            feat_attrs[f"from_{name}_Distance"] = result_distance
+            distance_values_set += 1
+            feat_attrs[f"from_{name}_Duration"] = result_duration
+            distance_values_set += 1
 
         feature_data[feat.id()] = (feat, feat_attrs)
 
