@@ -328,7 +328,7 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
 
     return D
 
-def read_GTFS(file_path, max_duration = 0):
+def read_GTFS(filepath, max_duration = 0, bar = None):
 
     PT = {}
 
@@ -341,7 +341,7 @@ def read_GTFS(file_path, max_duration = 0):
     """
 
 
-    print( "read GTFS: " + file_path)
+    print( "read GTFS: " + filepath)
 
     stamp_0 = datetime.now()
 
@@ -351,7 +351,7 @@ def read_GTFS(file_path, max_duration = 0):
     PT_end = {} # exit stop
 
 
-    conn = sqlite3.connect(file_path)
+    conn = sqlite3.connect(filepath)
     cursor = conn.cursor()
     query = "SELECT  origin, destination, InitialWaiting, CumulativeDuration, CumulativeWalking  FROM Results"
     cursor.execute(query)
@@ -359,7 +359,20 @@ def read_GTFS(file_path, max_duration = 0):
 
     skipped = 0
 
-    for row in tqdm(rows):
+    # self.labelCurrentStatus.setText("reading GTFS data...")
+    # self.repaint()
+
+    if bar is not None:
+        bar.setMaximum(len(rows))
+        bar.setValue(0)
+        bar.repaint()
+        QCoreApplication.processEvents()
+
+    for idx, row in enumerate(rows):
+        if bar is not None:
+            bar.setValue(idx)
+            bar.repaint()
+            QCoreApplication.processEvents()
 
         origin = row[0]
         destination = row[1]
