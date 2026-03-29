@@ -4,7 +4,6 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox, QDialog
 import os
 from .activeodm_distancemap_dialog import ActiveODMDistanceMapDialog
 from .combinedodm_distancemap_dialog import CombinedODMDistanceMapDialog
-from .combinedreach_analysis_dialog import CombinedReachAnalysisDialog
 from .poi_combined_reach_dialog import POICombinedReach
 from .odm_reach_dialog import ODMReachDialog
 

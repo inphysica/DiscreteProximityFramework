@@ -31,7 +31,7 @@ except Exception:
 
 
 
-from .Analytics.IO import read_ODM, estimate_sqlite_load_time, get_sqlite_info, quick_estimate_from_filesize
+from .Analytics.IO import read_ODM, get_sqlite_info, quick_estimate_from_filesize
 
 
 UI_PATH = os.path.join(os.path.dirname(__file__), 'activeodm_distancemap_dialog_base.ui')
@@ -403,59 +403,6 @@ class ActiveODMDistanceMapDialog(QDialog, FORM_CLASS):
         
         # Load settings
         self.load_settings()
-
-    def display_sqlite_info(self):
-        """Display SQLite file information and loading time estimate."""
-        odm_path = self.fileSelector.filePath()
-        
-        if not odm_path or not os.path.exists(odm_path):
-            self.labelCurrentStatus.setText("No ODM file selected")
-            return
-        
-        try:
-            # Show quick estimate immediately (file size only)
-            quick_est = quick_estimate_from_filesize(odm_path)
-            self.labelCurrentStatus.setText(f"ODM: {os.path.basename(odm_path)} | Size: {quick_est['file_size_mb']:.1f} MB | Quick est: {quick_est['estimated_string']}")
-            self.repaint()
-            QCoreApplication.processEvents()
-            
-            # Get detailed file info
-            info = get_sqlite_info(odm_path)
-            if 'error' in info:
-                self.labelCurrentStatus.setText(f"Error reading file info: {info['error']}")
-                return
-            
-            # Get detailed load time estimate (with row counts)
-            estimate = estimate_sqlite_load_time(odm_path)
-            
-            # Display comprehensive info
-            status_text = (
-                f"ODM: {os.path.basename(odm_path)} | "
-                f"Size: {info['file_size_mb']:.1f} MB | "
-                f"Rows: {info['total_rows']:,} | "
-                f"Origins: {info['unique_origins']:,} | "
-                f"Est: {estimate['estimated_string']}"
-            )
-            self.labelCurrentStatus.setText(status_text)
-            
-            # Log detailed info
-            self._log("=== SQLite ODM File Info ===")
-            self._log(f"File: {os.path.basename(odm_path)}")
-            self._log(f"Size: {info['file_size_mb']:.2f} MB")
-            self._log(f"Quick estimate (file size only): {quick_est['estimated_string']}")
-            self._log(f"Detailed estimate (full info): {estimate['estimated_string']}")
-            self._log(f"Total rows: {info['total_rows']:,}")
-            self._log(f"Unique origins: {info['unique_origins']:,}")
-            self._log(f"Unique destinations: {info['unique_destinations']:,}")
-            self._log(f"Rows per origin: {info['rows_per_origin']:.0f}")
-            self._log(f"Distance range: {info['min_distance']:.0f}m - {info['max_distance']:.0f}m (avg: {info['avg_distance']:.0f}m)")
-            self._log(f"  File read time: {estimate['file_read_time']:.2f}s")
-            self._log(f"  Processing time: {estimate['processing_time']:.2f}s")
-            self._log("===========================")
-            
-        except Exception as e:
-            self._log(f"Error displaying SQLite info: {str(e)}")
-            self.labelCurrentStatus.setText(f"Error: {str(e)}")
 
     def updateLayer(self, layer):
         # allow signals to call with None and resolve currentLayer

@@ -33,7 +33,7 @@ except Exception:
     Qgis = None
     QgsProject = None
 
-from .Analytics.IO import read_ODM, read_GTFS, estimate_sqlite_load_time, get_sqlite_info, quick_estimate_from_filesize
+from .Analytics.IO import read_ODM, read_GTFS, get_sqlite_info, quick_estimate_from_filesize
 from .Analytics.Access import PTODM_ByOrigin
 
 
@@ -697,8 +697,14 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
 
         origins, destinations, selection = sub_collectODs(self, name_field=name_field, id_field=self.idSelector.currentText(), use_name=self.checkBox_IncludeName.isChecked())
 
+        print(f" Build:  Collected {len(origins)} origins and {len(destinations)} destinations")
+        print(destinations[:10])
+
+
+
         # origins are selected features, destinations are all features (or selected if option is checked)
         step_start = time.time()
+        load_start = time.time()
 
         self.labelCurrentStatus.setText("Origins and destinations preparation is finished")
         self.repaint()
@@ -709,8 +715,9 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
 
         max_walk_dest_meters = self.maxWalkDest.value() * self.walkingSpeed.value() * 1000 / 60
 
-
-        self.labelCurrentStatus.setText("Reading Active ODM...")
+        # Show estimate for Active ODM
+        estimate_active = quick_estimate_from_filesize(self.activeODM_fileSelector.filePath())
+        self.labelCurrentStatus.setText(f"Reading Active ODM... (est. {estimate_active['estimated_string']})")
         self.repaint()
         step_start = time.time()
         # Convert max walking time (minutes) to distance (meters) using walking speed
@@ -725,7 +732,12 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         step_duration = time.time() - step_start
         self._log(f"Read Active ODM in {step_duration:.3f}s")
 
-        self.labelCurrentStatus.setText("Reading Walk-to-Station ODM...")
+
+        # print(activeODM)
+
+
+        estimate_walkstation = quick_estimate_from_filesize(self.walkStation_fileSelector.filePath())
+        self.labelCurrentStatus.setText(f"Reading Walk-to-Station ODM... (est. {estimate_walkstation['estimated_string']})")
         self.repaint()
         step_start = time.time()
         # Convert max walking time (minutes) to distance (meters) using walking speed
@@ -735,19 +747,24 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
                                   origin_prefix_whitelist = [], 
                                   destination_prefix_whitelist = ["PT"],
                                   bar=self.progressBar, 
-                                  selection=selection, 
+                                  selection=None, 
                                   limit=max_walk_station_meters)
         step_duration = time.time() - step_start
         self._log(f"Read Walk-to-Station ODM in {step_duration:.3f}s")
 
-        self.labelCurrentStatus.setText("Reading GTFS Transit...")
+        # Show estimate for GTFS Transit
+        estimate_gtfs = quick_estimate_from_filesize(self.GTFS_fileSelector.filePath())
+        self.labelCurrentStatus.setText(f"Reading GTFS Transit... (est. {estimate_gtfs['estimated_string']})")
         self.repaint()
         step_start = time.time()
         TravelODM = read_GTFS(filepath= self.GTFS_fileSelector.filePath(), 
                          max_duration=int(self.maxTotalTime.value()))
         step_duration = time.time() - step_start
-        self._log(f"Read GTFS Transit in {step_duration:.3f}s")     
+        self._log(f"Read GTFS Transit in {step_duration:.3f}s")
+        self._log(f"GTFS Transit ODM contains {len(TravelODM)} entries")
 
+        load_duration = time.time() - load_start
+        self._log(f"Data loading and preparation completed in {load_duration:.3f}s")
 
 
         # PTODM_ByOrigin
@@ -777,7 +794,7 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         self.labelCurrentStatus.setText("Exporting results...")
         self.repaint()
 
-        sub_Export_Combined_GeoJSON(self, ODM, origins)
+        sub_Export_GeoJSON(self, ODM, origins)
 
         self.labelCurrentStatus.setText("Done")
         self.repaint()
@@ -922,24 +939,20 @@ def sub_Export_GeoJSON(self, ODM, origins):
             id_ = origin[0]
             name = origin[1] # it is final name with ID in brackets if checkbox is checked
 
-            result_distance = -1
+            #print(f"Looking up ODM for origin {id_} to destination {destination}...")
+
             result_duration = -1
 
             if destination == id_:
-                result_distance = 0
                 result_duration = 0
             elif id_ in ODM and destination in ODM[id_]:
-                distance, duration, walk_time = ODM[id_][destination]
-                result_distance = distance
-                result_duration = duration
+                # print(f"Found ODM entry for origin {id_} to destination {destination}: {ODM[id_][destination]} seconds")
+                
+                result_duration = ODM[id_][destination]
                 data_lookups += 1
 
-            if self.checkBox_ResultDistance.isChecked():
-                feat_attrs[f"from_{name}_Distance"] = result_distance
-                distance_values_set += 1
-            if self.checkBox_ResultDuration.isChecked():
-                feat_attrs[f"from_{name}_Duration"] = result_duration
-                distance_values_set += 1
+            feat_attrs[f"from_{name}_Duration"] = result_duration
+            distance_values_set += 1
 
         feature_data[feat.id()] = (feat, feat_attrs)
 
