@@ -34,6 +34,40 @@ except Exception:
     QgsProject = None
 
 from .Analytics.IO import read_ODM, read_GTFS, estimate_sqlite_load_time, get_sqlite_info, quick_estimate_from_filesize
+from .Analytics.Access import PTODM_ByOrigin
+
+
+def _qvariant_to_python(value):
+    """Convert QVariant or other QGIS types to native Python types for JSON serialization."""
+    if value is None:
+        return None
+    
+    # Handle QVariant objects
+    try:
+        from qgis.PyQt.QtCore import QVariant
+        if isinstance(value, QVariant):
+            value = value.toPyObject() if hasattr(value, 'toPyObject') else value.value()
+    except Exception:
+        pass
+    
+    # Handle NULLs and check types
+    if value is None:
+        return None
+    
+    # Native Python types are already JSON serializable
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    
+    # Handle lists and tuples
+    if isinstance(value, (list, tuple)):
+        return [_qvariant_to_python(v) for v in value]
+    
+    # Handle dicts
+    if isinstance(value, dict):
+        return {k: _qvariant_to_python(v) for k, v in value.items()}
+    
+    # For anything else, convert to string
+    return str(value)
 
 
 UI_PATH = os.path.join(os.path.dirname(__file__), 'combinedodm_distancemap_dialog_base.ui')
@@ -85,7 +119,21 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
 
         QTimer.singleShot(0, lambda: self.updateLayer(None))
 
-        # connect dialog buttons
+        # connect POI layer widget signals
+        poi_layer_widget = getattr(self, 'poiLayer', None)
+        if poi_layer_widget is not None:
+            for sig in ('currentLayerChanged', 'layerChanged', 'sourceLayerChanged', 'currentIndexChanged'):
+                if hasattr(poi_layer_widget, sig):
+                    try:
+                        if sig == 'currentIndexChanged':
+                            poi_layer_widget.currentIndexChanged.connect(lambda _idx: self.updatePOILayer(None))
+                        else:
+                            getattr(poi_layer_widget, sig).connect(self.updatePOILayer)
+                    except Exception:
+                        continue
+                    break
+        
+        QTimer.singleShot(100, lambda: self.updatePOILayer(None))
         try:
             if hasattr(self, 'buttonBox'):
                 try:
@@ -110,6 +158,9 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         settings.setValue(f'{SETTINGS_KEY}/MaxWalkStation', self.maxWalkStation.value())
         settings.setValue(f'{SETTINGS_KEY}/MaxTotalTime', self.maxTotalTime.value())
         settings.setValue(f'{SETTINGS_KEY}/WalkingSpeed', self.walkingSpeed.value())
+        settings.setValue(f'{SETTINGS_KEY}/DecayPlatoo', self.decayPlatoo.value())
+        settings.setValue(f'{SETTINGS_KEY}/HalfDecayDuration', self.halfDecayDuration.value())
+        settings.setValue(f'{SETTINGS_KEY}/IncludeTransit', self.checkBox_IncludeTransit.isChecked())
 
         # Save settings
         self.save_settings()
@@ -184,21 +235,56 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         """Save all settings to QSettings."""
         settings = QSettings()
         try:
+            # Save file paths
+            settings.setValue(f'{SETTINGS_KEY}/ActiveODM_Path', self.activeODM_fileSelector.filePath())
+            settings.setValue(f'{SETTINGS_KEY}/GTFS_Path', self.GTFS_fileSelector.filePath())
+            settings.setValue(f'{SETTINGS_KEY}/WalkStation_Path', self.walkStation_fileSelector.filePath())
+            
+            # Save numeric values
+            settings.setValue(f'{SETTINGS_KEY}/MaxWalkDest', self.maxWalkDest.value())
+            settings.setValue(f'{SETTINGS_KEY}/MaxWalkStation', self.maxWalkStation.value())
+            settings.setValue(f'{SETTINGS_KEY}/MaxTotalTime', self.maxTotalTime.value())
+            settings.setValue(f'{SETTINGS_KEY}/WalkingSpeed', self.walkingSpeed.value())
+            settings.setValue(f'{SETTINGS_KEY}/DecayPlatoo', self.decayPlatoo.value())
+            settings.setValue(f'{SETTINGS_KEY}/HalfDecayDuration', self.halfDecayDuration.value())
+            
             # Save checkboxes
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', 
                             self.onlySelectedFeatures.isChecked())
-            settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeName', 
-                            self.checkBox_IncludeName.isChecked())
+            settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeTransit',
+                            self.checkBox_IncludeTransit.isChecked())
+            
+            # Save export prefix
+            export_prefix_input = getattr(self, 'exportPrefixInput', None)
+            if export_prefix_input is not None:
+                settings.setValue(f'{SETTINGS_KEY}/ExportPrefix', export_prefix_input.text())
             
             # Save field selectors
             id_sel = self._get_id_selector()
-            name_sel = self._get_name_selector()
             id_field = self._get_current_field(id_sel)
-            name_field = self._get_current_field(name_sel)
             if id_field:
                 settings.setValue(f'{SETTINGS_KEY}/IdField', id_field)
-            if name_field:
-                settings.setValue(f'{SETTINGS_KEY}/NameField', name_field)
+            
+            # Save POI layer and selectors
+            poi_layer = getattr(self, 'poiLayer', None)
+            if poi_layer is not None and hasattr(poi_layer, 'currentLayer'):
+                try:
+                    poi = poi_layer.currentLayer()
+                    if poi:
+                        settings.setValue(f'{SETTINGS_KEY}/POILayerId', poi.id())
+                except Exception:
+                    pass
+            
+            poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
+            poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+            if poi_grid_id_sel is not None:
+                poi_grid_id_field = self._get_current_field(poi_grid_id_sel)
+                if poi_grid_id_field:
+                    settings.setValue(f'{SETTINGS_KEY}/POIGridIdNameField', poi_grid_id_field)
+            if poi_group_attr_sel is not None:
+                poi_group_attr_field = self._get_current_field(poi_group_attr_sel)
+                if poi_group_attr_field:
+                    settings.setValue(f'{SETTINGS_KEY}/POIGroupAttrField', poi_group_attr_field)
             
             self._log("Saved combined model settings")
         except Exception as e:
@@ -210,24 +296,48 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         try:
             # Load checkboxes
             only_selected = settings.value(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', False, type=bool)
-            include_name = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeName', False, type=bool)
+            include_transit = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeTransit', True, type=bool)
             
             if hasattr(self, 'onlySelectedFeatures'):
                 self.onlySelectedFeatures.setChecked(only_selected)
-            if hasattr(self, 'checkBox_IncludeName'):
-                self.checkBox_IncludeName.setChecked(include_name)
+            if hasattr(self, 'checkBox_IncludeTransit'):
+                self.checkBox_IncludeTransit.setChecked(include_transit)
+            
+            # Load export prefix
+            export_prefix = settings.value(f'{SETTINGS_KEY}/ExportPrefix', 'W15', type=str)
+            if hasattr(self, 'exportPrefixInput'):
+                self.exportPrefixInput.setText(export_prefix)
             
             # Load field selectors
             id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
-            name_field = settings.value(f'{SETTINGS_KEY}/NameField', '', type=str)
             
             id_sel = self._get_id_selector()
-            name_sel = self._get_name_selector()
             
             if id_field and id_sel is not None:
                 self._try_set_selector_by_name(id_sel, id_field)
-            if name_field and name_sel is not None:
-                self._try_set_selector_by_name(name_sel, name_field)
+            
+            # Load POI layer
+            poi_layer_id = settings.value(f'{SETTINGS_KEY}/POILayerId', '', type=str)
+            poi_layer_widget = getattr(self, 'poiLayer', None)
+            if poi_layer_id and poi_layer_widget is not None and QgsProject is not None:
+                try:
+                    poi_layer = QgsProject.instance().mapLayer(poi_layer_id)
+                    if poi_layer and hasattr(poi_layer_widget, 'setLayer'):
+                        poi_layer_widget.setLayer(poi_layer)
+                except Exception:
+                    pass
+            
+            # Load POI attribute selectors
+            poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
+            poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
+            
+            poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
+            poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+            
+            if poi_grid_id_field and poi_grid_id_sel is not None:
+                self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
+            if poi_group_attr_field and poi_group_attr_sel is not None:
+                self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
             
             self._log("Loaded combined model settings")
         except Exception as e:
@@ -371,11 +481,15 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         max_walk_station = settings.value(f'{SETTINGS_KEY}/MaxWalkStation', 15.0, type=float)  # minutes
         max_total_time = settings.value(f'{SETTINGS_KEY}/MaxTotalTime', 60.0, type=float)  # minutes
         walking_speed = settings.value(f'{SETTINGS_KEY}/WalkingSpeed', 4.5, type=float)  # km/h
+        decay_platoo = settings.value(f'{SETTINGS_KEY}/DecayPlatoo', 10.0, type=float)  # minutes
+        half_decay_duration = settings.value(f'{SETTINGS_KEY}/HalfDecayDuration', 5.0, type=float)  # minutes
 
         self.maxWalkDest.setValue(max_walk_dest)
         self.maxWalkStation.setValue(max_walk_station)
         self.maxTotalTime.setValue(max_total_time)
         self.walkingSpeed.setValue(walking_speed)
+        self.decayPlatoo.setValue(decay_platoo)
+        self.halfDecayDuration.setValue(half_decay_duration)
         
         # Load other settings
         self.load_settings()
@@ -484,21 +598,14 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
             # Try to get saved field names from QSettings
             settings = QSettings()
             saved_id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
-            saved_name_field = settings.value(f'{SETTINGS_KEY}/NameField', '', type=str)
             
             # Use saved field if it exists in this layer, otherwise use first field
             if saved_id_field and saved_id_field in field_names:
                 id_field_name = saved_id_field
             elif fields:
                 id_field_name = fields[0].name()
-            
-            if saved_name_field and saved_name_field in field_names:
-                name_field_name = saved_name_field
-            elif fields:
-                name_field_name = fields[0].name()
 
         id_sel = self._get_id_selector()
-        name_sel = self._get_name_selector()
         
         if id_sel is not None and id_field_name:
             try:
@@ -506,14 +613,6 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
                     id_sel.setCurrentField(id_field_name)
                 else:
                     self._try_set_selector_by_name(id_sel, id_field_name)
-            except Exception:
-                pass
-        if name_sel is not None and name_field_name:
-            try:
-                if hasattr(name_sel, 'setCurrentField'):
-                    name_sel.setCurrentField(name_field_name)
-                else:
-                    self._try_set_selector_by_name(name_sel, name_field_name)
             except Exception:
                 pass
 
@@ -548,18 +647,49 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
                 id_sel.currentIndexChanged.connect(self._id_selector_conn)
         except Exception:
             pass
-        try:
-            if name_sel is not None and hasattr(name_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
-                def _name_handler(_idx, lid=lid):
-                    try:
-                        self._save_current_selection(lid)
-                    except Exception:
-                        pass
-                self._name_selector_conn = _name_handler
-                name_sel.currentIndexChanged.connect(self._name_selector_conn)
-        except Exception:
-            pass
+
+    def updatePOILayer(self, layer):
+        """Update POI attribute selectors when POI layer changes."""
+        if layer is None:
+            poi_layer_widget = getattr(self, 'poiLayer', None)
+            if poi_layer_widget is not None and hasattr(poi_layer_widget, 'currentLayer'):
+                try:
+                    layer = poi_layer_widget.currentLayer()
+                except Exception:
+                    layer = None
+
+        poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
+        poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+
+        # Set layer for selectors
+        if poi_grid_id_sel is not None and hasattr(poi_grid_id_sel, 'setLayer'):
+            try:
+                poi_grid_id_sel.setLayer(layer)
+            except Exception:
+                pass
+        if poi_group_attr_sel is not None and hasattr(poi_group_attr_sel, 'setLayer'):
+            try:
+                poi_group_attr_sel.setLayer(layer)
+            except Exception:
+                pass
+        
+        self._log(f"updatePOILayer: set to {layer.name() if layer else 'None'}")
+
+        # Try to restore previously saved selections for this layer
+        if layer is not None:
+            settings = QSettings()
+            try:
+                poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
+                poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
+                
+                if poi_grid_id_field and poi_grid_id_sel is not None:
+                    self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
+                if poi_group_attr_field and poi_group_attr_sel is not None:
+                    self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
+                
+                self._log(f"Restored POI attributes: grid_id={poi_grid_id_field}, group_attr={poi_group_attr_field}")
+            except Exception as e:
+                self._log(f"Error restoring POI attributes: {str(e)}", level='debug')
 
     def Evaluate(self, max_features=100):
 
@@ -627,31 +757,43 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
 
     def Build(self):
 
+
         build_start = time.time()
-        self._log("\n" + "="*50)
+        self._log("\n")
+        self._log("="*50)
         self._log("Combined Model Build STARTED")
         self._log("="*50)
 
-        self.labelCurrentStatus.setText("Collecting destinations...")
+
+        self.labelCurrentStatus.setText("Collect origins and destinations..")
         self.repaint()
 
-        step_start = time.time()
-        name_field = self.nameSelector.currentText() if hasattr(self, 'nameSelector') else None
-        destinations, selection = sub_collectDestinations(self, 
-                                                         id_field=self.idSelector.currentText(),
-                                                         name_field=name_field,
-                                                         use_name=self.checkBox_IncludeName.isChecked())
-        step_duration = time.time() - step_start
-        self._log(f"Collected {len(destinations)} destinations in {step_duration:.3f}s")
+        origins, destinations, selection = sub_collectODs(self, name_field=None, id_field=self.idSelector.currentText(), use_name=False)
 
-        # Load the three ODM matrices
+        # origins are selected features, destinations are all features (or selected if option is checked)
+        step_start = time.time()
+
+        self.labelCurrentStatus.setText("Origins and destinations preparation is finished")
+        self.repaint()
+
+        self.progressBar.setMaximum(1)
+        self.progressBar.setValue(0)
+        self.progressBar.repaint()
+
+        max_walk_dest_meters = self.maxWalkDest.value() * self.walkingSpeed.value() * 1000 / 60
+
+
         self.labelCurrentStatus.setText("Reading Active ODM...")
         self.repaint()
         step_start = time.time()
         # Convert max walking time (minutes) to distance (meters) using walking speed
         max_walk_dest_meters = self.maxWalkDest.value() * self.walkingSpeed.value() * 1000 / 60
-        activeODM = read_ODM(self.activeODM_fileSelector.filePath(), False, 
-                            bar=self.progressBar, selection=selection, 
+        activeODM = read_ODM(filepath= self.activeODM_fileSelector.filePath(), 
+                            remove_prefix = False,
+                            origin_prefix_whitelist = [],
+                            destination_prefix_whitelist = [],
+                            bar=self.progressBar, 
+                            selection=selection, 
                             limit=max_walk_dest_meters)
         step_duration = time.time() - step_start
         self._log(f"Read Active ODM in {step_duration:.3f}s")
@@ -661,8 +803,12 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         step_start = time.time()
         # Convert max walking time (minutes) to distance (meters) using walking speed
         max_walk_station_meters = self.maxWalkStation.value() * self.walkingSpeed.value() * 1000 / 60
-        walkStationODM = read_ODM(self.walkStation_fileSelector.filePath(), False, 
-                                  bar=self.progressBar, selection=selection, 
+        walkStationODM = read_ODM(filepath= self.walkStation_fileSelector.filePath(), 
+                                  remove_prefix = False,
+                                  origin_prefix_whitelist = [], 
+                                  destination_prefix_whitelist = ["PT"],
+                                  bar=self.progressBar, 
+                                  selection=selection, 
                                   limit=max_walk_station_meters)
         step_duration = time.time() - step_start
         self._log(f"Read Walk-to-Station ODM in {step_duration:.3f}s")
@@ -670,26 +816,37 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         self.labelCurrentStatus.setText("Reading GTFS Transit...")
         self.repaint()
         step_start = time.time()
-        GTFS = read_GTFS(self.GTFS_fileSelector.filePath(), max_duration=int(self.maxTotalTime.value() * 60))
+        TravelODM = read_GTFS(filepath= self.GTFS_fileSelector.filePath(), 
+                         max_duration=int(self.maxTotalTime.value()))
         step_duration = time.time() - step_start
-        self._log(f"Read GTFS Transit in {step_duration:.3f}s")
+        self._log(f"Read GTFS Transit in {step_duration:.3f}s")     
 
-        self.labelCurrentStatus.setText("Building combined distance map...")
+
+
+        # PTODM_ByOrigin
+
+
+        self.labelCurrentStatus.setText("Build combined distance map...")
         self.repaint()
 
-        src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
-        step_start = time.time()
-        combinedMap = sub_BuildCombinedDistanceMap(self, activeODM, walkStationODM, GTFS, 
-                                                    destinations, src_layer=src_layer, 
-                                                    max_total_time=self.maxTotalTime.value(),
-                                                    bar=self.progressBar)
-        step_duration = time.time() - step_start
-        self._log(f"Built combined distance map in {step_duration:.3f}s")
+        ODM = PTODM_ByOrigin(
+            PTAccess = walkStationODM, 
+            PTTravel = TravelODM, 
+            WalkingODM = activeODM, 
+            OriginSelection = selection, 
+            DestinationSelection=destinations, 
+            max_total_duration=self.maxTotalTime.value(), 
+            max_walking_duration=self.maxWalkStation.value(),
+            max_direct_walking_duration=self.maxWalkDest.value(),
+            bar=self.progressBar)
+
+        self.labelCurrentStatus.setText("Combined distance map built.")
+        self.repaint()
 
         self.labelCurrentStatus.setText("Exporting results...")
         self.repaint()
 
-        sub_Export_Combined_GeoJSON(self, combinedMap, destinations)
+        sub_Export_Combined_GeoJSON(self, ODM, origins)
 
         self.labelCurrentStatus.setText("Done")
         self.repaint()
@@ -701,105 +858,283 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         return True
 
 
-def sub_collectDestinations(self, id_field, name_field=None, use_name=False):
-    """Collect destination IDs from input layer."""
+
+
+def sub_collectODs(self, name_field, id_field, use_name=True, bar=None):
+
+
+    """
+
+    Collect origin and destination IDs from input layer.
+    Origins are determined based on selection (if "only selected" is checked) or all features
+    Destinations are always collected from all features.
+
+    """
+
+
     src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
 
     all_features = [feat for feat in src_layer.getFeatures()]
 
     if (self.onlySelectedFeatures.isChecked() == True):
+
         features = src_layer.selectedFeatures()
+        
     else:
+
         features = all_features
 
+    origins = []
     destinations = []
     selection = []
 
-    self.labelCurrentStatus.setText("Collecting destinations...")
+    self.labelCurrentStatus.setText("Collecting destinations ...")
     self.repaint()
-    bar = self.progressBar
-    bar.setMaximum(len(features))
-    bar.setValue(0)
-    bar.repaint()
-    QCoreApplication.processEvents()
-
-    for i, feat in enumerate(features):
-        bar.setValue(i)
+    if bar is not None:
+        bar.setMaximum(len(all_features))
+        bar.setValue(0)
         bar.repaint()
         QCoreApplication.processEvents()
+    for i, feat in enumerate(all_features):
+        if bar is not None:
+            bar.setValue(i)
+            bar.repaint()
+            QCoreApplication.processEvents()
         
         id_ = str(feat[id_field])
+        destinations.append( id_ )
+
+
+    self.labelCurrentStatus.setText("Collecting origins|destinations ...")
+    self.repaint()
+    if bar is not None:
+        bar.setMaximum(len(features))
+        bar.setValue(0)
+        bar.repaint()
+        QCoreApplication.processEvents()
+    for i, feat in enumerate(features):
+
+        if bar is not None:
+            bar.setValue(i)
+            bar.repaint()
+            QCoreApplication.processEvents()
         
-        if use_name and name_field:
+        id_ = str(feat[id_field])
+
+        if use_name:
             name = str(feat[name_field]) + f" ({id_})"
         else:
-            name = str(id_)
-        
-        destinations.append((id_, name))
+            name = str(id_)  
+
+        origins.append( (id_, name) )
         selection.append(id_)
 
-    return destinations, selection
+
+    return origins, destinations, selection
 
 
-def sub_BuildCombinedDistanceMap(self, activeODM, walkStationODM, GTFS, destinations, src_layer, max_total_time, bar=None):
+
+
+
+def sub_Export_GeoJSON(self, ODM, origins):
     """
-    Combine three matrices to find optimal combined model routes:
-    1. Walk from origin to station (walkStationODM)
-    2. Transit from station to station (GTFS)
-    3. Walk from station to destination (activeODM)
-    
-    For each origin-destination pair, find the best route option.
+    GeoJSON export using Python's json library - writes directly to GeoJSON file.
+    Much faster than QGIS layer updates. No QGIS API overhead.
+    Output file is saved next to input file with datetime suffix.
     """
+    total_start = time.time()
+    self._log("=== GeoJSON EXPORT (JSON Library) ===")
+    self._log(f"Starting GeoJSON export with {len(origins)} origins")
     
+    src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+    crs_authid = src_layer.crs().authid()
+
+    # Step 1: Load features
+    self.labelCurrentStatus.setText("Loading features...")
+    self.repaint()
+
+    step_start = time.time()
+    feats = [feat for feat in src_layer.getFeatures()]
+    step_duration = time.time() - step_start
+    self._log(f"[1/5] Load features: {step_duration:.3f}s ({len(feats)} features)")
+
+    # Step 2: Build data map
+    self.labelCurrentStatus.setText("Building data map...")
+    self.repaint()
+
+    bar = self.progressBar
     if bar is not None:
-        bar.setMaximum(len(destinations))
+        bar.setMaximum(len(feats))
         bar.setValue(0)
         bar.repaint()
         QCoreApplication.processEvents()
 
-    CombinedMap = {}
+    step_start = time.time()
+    feature_data = {}  # Maps feature_id -> {attr: value}
+    id_field_name = self.idSelector.currentText()
+    self._log(f"Using ID field: {id_field_name}")
+    
+    data_lookups = 0
+    distance_values_set = 0
 
-    for i, dest_id in enumerate(destinations):
+    # print(origins)
 
+    for i, feat in enumerate(feats):
+        # if (i + 1) % max(1, len(feats) // 2) == 0:
+        bar.setValue(i)
+        QCoreApplication.processEvents()
+
+        destination = feat[id_field_name]
+        feat_attrs = {}
+        
+        # Copy all original attributes
+        for field in feat.fields():
+            feat_attrs[field.name()] = feat[field.name()]
+
+        # Add distance/duration fields
+        for origin in origins:
+            
+            id_ = origin[0]
+            name = origin[1] # it is final name with ID in brackets if checkbox is checked
+
+            result_distance = -1
+            result_duration = -1
+
+            if destination == id_:
+                result_distance = 0
+                result_duration = 0
+            elif id_ in ODM and destination in ODM[id_]:
+                distance, duration, walk_time = ODM[id_][destination]
+                result_distance = distance
+                result_duration = duration
+                data_lookups += 1
+
+            if self.checkBox_ResultDistance.isChecked():
+                feat_attrs[f"from_{name}_Distance"] = result_distance
+                distance_values_set += 1
+            if self.checkBox_ResultDuration.isChecked():
+                feat_attrs[f"from_{name}_Duration"] = result_duration
+                distance_values_set += 1
+
+        feature_data[feat.id()] = (feat, feat_attrs)
+
+    step_duration = time.time() - step_start
+    self._log(f"[2/5] Build data map: {step_duration:.3f}s ({len(feature_data)} features, {data_lookups} lookups)")
+
+    # Step 3: Generate output path
+    step_start = time.time()
+    src_file = src_layer.dataProvider().dataSourceUri()
+    
+    if src_file:
+        if '|' in src_file:
+            src_file = src_file.split('|')[0]
+        base_dir = os.path.dirname(src_file)
+        base_name = os.path.splitext(os.path.basename(src_file))[0]
+    else:
+        base_dir = os.path.expanduser('~')
+        base_name = "results"
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    output_filename = f"{base_name}_results_{timestamp}.geojson"
+    output_path = os.path.join(base_dir, output_filename)
+    
+    self._log(f"Output file: {output_path}")
+    step_duration = time.time() - step_start
+    self._log(f"[3/5] Generate path: {step_duration:.3f}s")
+
+    # Step 4: Write GeoJSON directly using json library
+    self.labelCurrentStatus.setText("Writing GeoJSON file...")
+    self.repaint()
+
+    step_start = time.time()
+    
+    try:
+        geojson_features = []
+        
         if bar is not None:
-            bar.setValue(i)
+            bar.setMaximum(len(feature_data))
+            bar.setValue(0)
+            bar.repaint()
             QCoreApplication.processEvents()
 
-        CombinedMap[dest_id] = {}
+        for i, (feat_id, (orig_feat, feat_attrs)) in enumerate(feature_data.items()):
+            if (i + 1) % max(1, len(feature_data) // 10) == 0:
+                bar.setValue(i)
+                QCoreApplication.processEvents()
 
-        # For each origin in the matrices
-        all_origins = set()
-        if dest_id in activeODM:
-            all_origins.update(activeODM[dest_id].keys())
+            # Get geometry as GeoJSON
+            geom = orig_feat.geometry()
+            if geom is None or geom.isEmpty():
+                geometry = None
+            else:
+                geometry = json.loads(geom.asJson())
 
-        for origin_id in all_origins:
-            
-            routes = []
-            
-            # Option 1: Direct walk (Active ODM to destination)
-            if dest_id in activeODM and origin_id in activeODM[dest_id]:
-                dist, dur = activeODM[dest_id][origin_id]
-                routes.append({
-                    'type': 'walk',
-                    'distance': dist,
-                    'duration': dur,
-                    'total_time': dur / 60  # convert seconds to minutes
-                })
-            
-            # Option 2: Walk to station + Transit + Walk from station
-            # This would require station mapping logic - simplified for now
-            # In full implementation: iterate through walk_station pairs and GTFS routes
-            
-            # Select best route (shortest time)
-            if routes:
-                best_route = min(routes, key=lambda r: r['total_time'])
-                if best_route['total_time'] <= max_total_time:
-                    CombinedMap[dest_id][origin_id] = best_route
+            # Create GeoJSON feature
+            geojson_feat = {
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": feat_attrs
+            }
+            geojson_features.append(geojson_feat)
 
-    return CombinedMap
+        # Create FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "crs": {
+                "type": "name",
+                "properties": {
+                    "name": crs_authid
+                }
+            },
+            "features": geojson_features
+        }
+
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(geojson_data, f, indent=2, default=str)
+
+        step_duration = time.time() - step_start
+        file_size = os.path.getsize(output_path) / (1024 * 1024)
+        self._log(f"[4/5] Write file: {step_duration:.3f}s ({file_size:.2f} MB, {len(geojson_features)} features)")
+        
+    except Exception as e:
+        self._log(f"ERROR writing GeoJSON: {str(e)}")
+        return False
+
+    # Step 5: Load into QGIS
+    self.labelCurrentStatus.setText("Loading results layer...")
+    self.repaint()
+
+    step_start = time.time()
+    
+    try:
+        result_layer = QgsVectorLayer(output_path, os.path.basename(output_path), "ogr")
+        if not result_layer.isValid():
+            self._log("ERROR: Failed to load output GeoJSON layer")
+            return False
+        
+        QgsProject.instance().addMapLayer(result_layer)
+        step_duration = time.time() - step_start
+        self._log(f"[5/5] Load layer: {step_duration:.3f}s")
+        
+    except Exception as e:
+        self._log(f"ERROR loading layer: {str(e)}")
+        return False
+
+    total_duration = time.time() - total_start
+    self._log(f"=== TOTAL TIME: {total_duration:.3f}s ===")
+    self._log(f"Summary: {len(feats)} features × {len(origins)} origins")
+    self._log(f"Output: {output_path}")
+    self._log("=== END GeoJSON EXPORT ===")
+    
+    return True
 
 
-def sub_Export_Combined_GeoJSON(self, combinedMap, destinations):
+
+
+
+
+def sub_Export_Combined_GeoJSON(self, ODM, origins):
     """
     Export combined model routing results to GeoJSON.
     Output fields: AccessWalk, TransitTime, EgressWalk, TotalTime
@@ -807,9 +1142,10 @@ def sub_Export_Combined_GeoJSON(self, combinedMap, destinations):
     
     total_start = time.time()
     self._log("=== Combined Model GeoJSON EXPORT ===")
-    self._log(f"Starting export with {len(destinations)} destinations")
+    self._log(f"Starting export with {len(origins)} origins")
     
     src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+    crs_authid = src_layer.crs().authid()
     
     self.labelCurrentStatus.setText("Loading features...")
     self.repaint()
@@ -817,7 +1153,7 @@ def sub_Export_Combined_GeoJSON(self, combinedMap, destinations):
     step_start = time.time()
     feats = [feat for feat in src_layer.getFeatures()]
     step_duration = time.time() - step_start
-    self._log(f"[1/3] Load features: {step_duration:.3f}s ({len(feats)} features)")
+    self._log(f"[1/4] Load features: {step_duration:.3f}s ({len(feats)} features)")
 
     # Step 2: Prepare data
     self.labelCurrentStatus.setText("Preparing data...")
@@ -826,6 +1162,7 @@ def sub_Export_Combined_GeoJSON(self, combinedMap, destinations):
     step_start = time.time()
     geojson_features = []
     
+    print(origins) # BUG: check origins format
     for feat in feats:
         feat_dict = {
             'type': 'Feature',
@@ -836,43 +1173,75 @@ def sub_Export_Combined_GeoJSON(self, combinedMap, destinations):
         # Copy base attributes
         for field_name in feat.fields().names():
             try:
-                feat_dict['properties'][field_name] = feat[field_name]
+                feat_dict['properties'][field_name] = _qvariant_to_python(feat[field_name])
             except Exception:
                 pass
         
         # Add routing results for each destination
         dest_id = str(feat[self.idSelector.currentText()])
+
         
-        if dest_id in combinedMap:
-            for origin_data in destinations:
+        
+
+
+        if dest_id in ODM:
+            for origin_data in origins:
                 if isinstance(origin_data, tuple):
                     origin_id, origin_name = origin_data
                 else:
                     origin_id = origin_data
                     origin_name = origin_id
                 
-                if origin_id in combinedMap[dest_id]:
-                    route_data = combinedMap[dest_id][origin_id]
+                if origin_id in ODM[dest_id]:
+                    route_data = ODM[dest_id][origin_id]
                     feat_dict['properties'][f'from_{origin_name}_TotalTime_min'] = route_data.get('total_time', -1)
                     feat_dict['properties'][f'from_{origin_name}_Distance_m'] = route_data.get('distance', -1)
-                    feat_dict['properties'][f'from_{origin_name}_Duration_s'] = route_data.get('duration', -1)
+                    feat_dict['properties'][f'from_{origin_name}_Duration_min'] = route_data.get('duration', -1)
         
         geojson_features.append(feat_dict)
     
     step_duration = time.time() - step_start
-    self._log(f"[2/3] Prepare data: {step_duration:.3f}s")
+    self._log(f"[2/4] Prepare data: {step_duration:.3f}s")
 
     # Step 3: Write GeoJSON file
     self.labelCurrentStatus.setText("Writing GeoJSON file...")
     self.repaint()
 
     step_start = time.time()
+
+    # Get the directory of the grid input layer
+    output_dir = None
+    
+    # Try multiple methods to get the layer source path
+    try:
+        # Method 1: Try dataProvider().dataSourceUri()
+        src_file = src_layer.dataProvider().dataSourceUri()
+        if src_file and os.path.isabs(src_file):
+            output_dir = os.path.dirname(src_file)
+    except Exception:
+        pass
+    
+    # Method 2: Try the 'source' property
+    if not output_dir:
+        try:
+            src_file = src_layer.source()
+            if src_file and os.path.isabs(src_file) and not src_file.startswith('PG:'):
+                output_dir = os.path.dirname(src_file)
+        except Exception:
+            pass
+    
+    # Fallback to user's home directory if no valid path found
+    if not output_dir:
+        output_dir = os.path.expanduser('~')
+        self._log(f"Warning: Could not determine grid layer path, using home directory: {output_dir}", level='debug')
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     output_file = os.path.join(
-        os.path.dirname(self.activeODM_fileSelector.filePath()),
+        output_dir,
         f'combined_model_results_{timestamp}.geojson'
     )
+    
+    self._log(f"Output directory: {output_dir}", level='debug')
     
     geojson_dict = {
         'type': 'FeatureCollection',
@@ -880,13 +1249,44 @@ def sub_Export_Combined_GeoJSON(self, combinedMap, destinations):
         'features': geojson_features
     }
     
+    class QVariantEncoder(json.JSONEncoder):
+        """Custom JSON encoder to handle QVariant and other non-serializable types."""
+        def default(self, obj):
+            obj_converted = _qvariant_to_python(obj)
+            if obj_converted == str(obj):  # Fallback was applied
+                return obj_converted
+            return super().default(obj)
+    
     with open(output_file, 'w') as f:
-        json.dump(geojson_dict, f, indent=2)
+        json.dump(geojson_dict, f, indent=2, cls=QVariantEncoder)
     
     step_duration = time.time() - step_start
-    self._log(f"[3/3] Write GeoJSON: {step_duration:.3f}s")
+    self._log(f"[3/4] Write GeoJSON: {step_duration:.3f}s")
     self._log(f"Output: {output_file}")
     
+    # Step 4: Load into QGIS
+    self.labelCurrentStatus.setText("Loading results layer...")
+    self.repaint()
+
+    step_start = time.time()
+    
+    try:
+        result_layer = QgsVectorLayer(output_file, os.path.basename(output_file), "ogr")
+        if not result_layer.isValid():
+            self._log("ERROR: Failed to load output GeoJSON layer")
+            return False
+        
+        QgsProject.instance().addMapLayer(result_layer)
+        step_duration = time.time() - step_start
+        self._log(f"[4/4] Load layer: {step_duration:.3f}s")
+        
+    except Exception as e:
+        self._log(f"ERROR loading layer: {str(e)}")
+        return False
+
     total_duration = time.time() - total_start
-    self._log(f"Combined Model GeoJSON EXPORT completed in {total_duration:.3f}s total")
-    self._log("================================")
+    self._log(f"=== TOTAL TIME: {total_duration:.3f}s ===")
+    self._log(f"Summary: {len(feats)} features × {len(origins)} origins")
+    self._log(f"Output: {output_file}")
+    self._log("=== END GeoJSON EXPORT ===")
+

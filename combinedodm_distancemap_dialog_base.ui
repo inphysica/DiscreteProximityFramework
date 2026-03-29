@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>750</width>
-    <height>613</height>
+    <height>700</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,34 +15,121 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Input Grid Layer</string>
+    <layout class="QHBoxLayout" name="horizontalLayout_InputLayer">
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>Input Grid Layer</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsMapLayerComboBox" name="inputLayer"/>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="onlySelectedFeatures">
+       <property name="text">
+        <string>Selected only</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_ID">
+     <item>
+      <widget class="QLabel" name="label_3">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>ID (must match ODM origins)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFieldComboBox" name="idSelector"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="Line" name="line_id_separator">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QgsMapLayerComboBox" name="inputLayer"/>
+    <layout class="QHBoxLayout" name="horizontalLayout_POILayer">
+     <item>
+      <widget class="QLabel" name="label_poi_layer">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>POI Layer</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsMapLayerComboBox" name="poiLayer"/>
+     </item>
+    </layout>
    </item>
    <item>
-    <widget class="QCheckBox" name="onlySelectedFeatures">
-     <property name="text">
-      <string>Selected features only</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="horizontalLayout_GridIdName">
+     <item>
+      <widget class="QLabel" name="label_grid_id_name">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>Grid ID Name</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFieldComboBox" name="poiGridIdNameSelector"/>
+     </item>
+    </layout>
    </item>
    <item>
-    <widget class="QLabel" name="label_3">
-     <property name="text">
-      <string>ID (must match ODM origins)</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QgsFieldComboBox" name="idSelector"/>
+    <layout class="QHBoxLayout" name="horizontalLayout_GroupAttr">
+     <item>
+      <widget class="QLabel" name="label_group_attr">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>Group Attribute Name</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFieldComboBox" name="poiGroupAttrSelector"/>
+     </item>
+    </layout>
    </item>
    <item>
     <widget class="Line" name="line_2">
@@ -52,34 +139,64 @@
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="label_2">
-     <property name="text">
-      <string>Active ODM (SQLite) - Direct walking to destination</string>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="horizontalLayout_activeODM">
+     <item>
+      <widget class="QLabel" name="label_2">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>Active ODM (SQLite)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFileWidget" name="activeODM_fileSelector"/>
+     </item>
+    </layout>
    </item>
    <item>
-    <widget class="QgsFileWidget" name="activeODM_fileSelector"/>
+    <layout class="QHBoxLayout" name="horizontalLayout_GTFS">
+     <item>
+      <widget class="QLabel" name="label_gtfs">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>GTFS Transit (SQLite)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFileWidget" name="GTFS_fileSelector"/>
+     </item>
+    </layout>
    </item>
    <item>
-    <widget class="QLabel" name="label_gtfs">
-     <property name="text">
-      <string>GTFS Transit (SQLite) - Station-to-station travel times</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QgsFileWidget" name="GTFS_fileSelector"/>
-   </item>
-   <item>
-    <widget class="QLabel" name="label_walk">
-     <property name="text">
-      <string>Walk-to-Station ODM (SQLite) - Walking to/from stations</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QgsFileWidget" name="walkStation_fileSelector"/>
+    <layout class="QHBoxLayout" name="horizontalLayout_WalkStation">
+     <item>
+      <widget class="QLabel" name="label_walk">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>Walk-to-Station ODM (SQLite)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFileWidget" name="walkStation_fileSelector"/>
+     </item>
+    </layout>
    </item>
    <item>
     <widget class="Line" name="line">
@@ -99,7 +216,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>160</height>
+       <height>240</height>
       </size>
      </property>
      <property name="font">
@@ -217,7 +334,7 @@
        </rect>
       </property>
       <property name="text">
-       <string>Max total time (minutes)</string>
+       <string>Max total time (min)</string>
       </property>
      </widget>
      <widget class="QgsDoubleSpinBox" name="maxTotalTime">
@@ -239,6 +356,86 @@
        <double>60.000000000000000</double>
       </property>
      </widget>
+     <widget class="QLabel" name="label_decay_platoo">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>140</y>
+        <width>150</width>
+        <height>30</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Decay platoo (min)</string>
+      </property>
+     </widget>
+     <widget class="QgsDoubleSpinBox" name="decayPlatoo">
+      <property name="geometry">
+       <rect>
+        <x>190</x>
+        <y>145</y>
+        <width>150</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="decimals">
+       <number>1</number>
+      </property>
+      <property name="maximum">
+       <double>1440.000000000000000</double>
+      </property>
+      <property name="value">
+       <double>10.000000000000000</double>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_half_decay">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>170</y>
+        <width>150</width>
+        <height>30</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Half decay duration (min)</string>
+      </property>
+     </widget>
+     <widget class="QgsDoubleSpinBox" name="halfDecayDuration">
+      <property name="geometry">
+       <rect>
+        <x>190</x>
+        <y>175</y>
+        <width>150</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="decimals">
+       <number>1</number>
+      </property>
+      <property name="maximum">
+       <double>1440.000000000000000</double>
+      </property>
+      <property name="value">
+       <double>5.000000000000000</double>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBox_IncludeTransit">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>200</y>
+        <width>200</width>
+        <height>30</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Include transit</string>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
+      </property>
+     </widget>
     </widget>
    </item>
    <item>
@@ -252,7 +449,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>80</height>
+       <height>50</height>
       </size>
      </property>
      <property name="font">
@@ -262,50 +459,30 @@
       </font>
      </property>
      <property name="title">
-      <string>Options</string>
+      <string>Export</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_Options">
       <item>
-       <widget class="QCheckBox" name="checkBox_IncludeName">
-        <property name="text">
-         <string>Include Name in output</string>
-        </property>
-        <property name="checked">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_name">
+       <layout class="QHBoxLayout" name="horizontalLayout_prefix">
         <item>
-         <widget class="QLabel" name="label_name">
+         <widget class="QLabel" name="label_prefix">
+          <property name="minimumWidth">
+           <number>190</number>
+          </property>
+          <property name="maximumWidth">
+           <number>190</number>
+          </property>
           <property name="text">
-           <string>Name attribute:</string>
+           <string>Prefix</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QgsFieldComboBox" name="nameSelector">
-          <property name="minimumSize">
-           <size>
-            <width>200</width>
-            <height>0</height>
-           </size>
+         <widget class="QLineEdit" name="exportPrefixInput">
+          <property name="text">
+           <string>W15</string>
           </property>
          </widget>
-        </item>
-        <item>
-         <spacer name="horizontalSpacer_name">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </item>
