@@ -28,11 +28,6 @@ def LogisticDicay(x, Plato, Half, Growth_Rate):
 
         return g
 
-
-
-# Analytics.Reach_wDecay(Park_ODM, 400, 200, Park_W)
-
-
 def POIREach_wDecay(POIs, ODM, origin_selection, Max_Duration, Plato, Half, Use_Decay = True, Use_Groups = False, Suffix = "", bar = None):
 
     """
@@ -107,7 +102,7 @@ def POIREach_wDecay(POIs, ODM, origin_selection, Max_Duration, Plato, Half, Use_
                     if duration > Max_Duration:
                         continue
 
-                    Reach[origin][group_suffix] += logistic_decay(duration, Plato, Half, Growth_Rate) * POIs[group][destination] if Use_Decay else POIs[group][destination]
+                    Reach[origin][group_suffix] += LogisticDicay(duration, Plato, Half, Growth_Rate) * POIs[group][destination] if Use_Decay else POIs[group][destination]
 
 
             #print(f"Origin: {origin}, Reach: {Reach[origin]}")
@@ -128,7 +123,7 @@ def POIREach_wDecay(POIs, ODM, origin_selection, Max_Duration, Plato, Half, Use_
                 if duration > Max_Duration:
                     continue
 
-                Reach[origin][Suffix] += logistic_decay(duration, Plato, Half, Growth_Rate) * POIs[POI_DEFAULT_KEY][destination] if Use_Decay else POIs[POI_DEFAULT_KEY][destination]
+                Reach[origin][Suffix] += LogisticDicay(duration, Plato, Half, Growth_Rate) * POIs[POI_DEFAULT_KEY][destination] if Use_Decay else POIs[POI_DEFAULT_KEY][destination]
 
     return Reach, groups_wSuffix
 

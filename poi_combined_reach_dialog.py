@@ -889,11 +889,11 @@ class POICombinedReach(QDialog, FORM_CLASS):
                             bar=self.progressBar, 
                             selection=origins_selection if self.onlySelectedFeatures.isChecked() else None, 
                             limit=max_walk_dest_meters,
-                            only_duration=True)
+                            only_duration=not self.checkBox_IncludeTransit.isChecked() )
         step_duration = time.time() - step_start
         self._log(f"Read Active ODM in {step_duration:.3f}s")
 
-        
+
 
         # Load Active ODM
 
@@ -944,6 +944,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 max_walking_duration=self.maxWalkStation.value(),
                 max_direct_walking_duration=self.maxWalkDest.value(),
                 bar=self.progressBar)
+
 
         load_duration = time.time() - load_start
         self._log(f"Data loading and preparation completed in {load_duration:.3f}s")

@@ -5,7 +5,7 @@ import os
 from .activeodm_distancemap_dialog import ActiveODMDistanceMapDialog
 from .combinedodm_distancemap_dialog import CombinedODMDistanceMapDialog
 from .poi_combined_reach_dialog import POICombinedReach
-from .odm_reach_dialog import ODMReachDialog
+# from .odm_reach_dialog import ODMReachDialog
 
 from qgis.core import QgsMessageLog, Qgis
 
