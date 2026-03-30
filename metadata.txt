@@ -1,7 +1,14 @@
 [general]
-name=DiscreteProximityFramework
-description=QGIS plugin for discrete proximity operations
-version=0.1.2
-qgisMinimumVersion=3.2
+name=Discrete Proximity Framework
+description=QGIS plugin for reachability and distance analysis using Origin-Destination Matrices (ODM)
+version=0.2.0
+qgisMinimumVersion=3.16
 author=inphysica technology
 email=dev@inphysica.com
+url=https://github.com/inphysica/DiscreteProximityFramework
+repository=https://github.com/inphysica/DiscreteProximityFramework
+tracker=https://github.com/inphysica/DiscreteProximityFramework/issues
+about=Multiple reachability analysis tools supporting Active Mobility, Public Transport, Combined Multimodal models, and POI-based analysis
+category=Analysis
+icon=icons/icon.png
+changelog=0.2.0 - Added POI grouping and weighting, decay analysis, file load estimation, improved UI hints

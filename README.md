@@ -23,21 +23,32 @@ The plugin provides four analysis tools accessible from the Plugins menu and too
 - `metadata.txt` - Plugin metadata
 
 ### Analysis Dialogs
-- `activeodm_distancemap_dialog.py` - Active Mobility distance map analysis
+- `activeodm_distancemap_dialog.py` - Active Mobility distance map analysis with file load estimation
 - `activeodm_distancemap_dialog_base.ui` - UI definition for Active Mobility dialog
-- `combinedodm_distancemap_dialog.py` - Combined multimodal distance map analysis
-- `combinedodm_distancemap_dialog_base.ui` - UI definition for Combined model dialog
-- `odm_reach_dialog.py` - Generic ODM reachability analysis
+- `combinedodm_distancemap_dialog.py` - Combined multimodal distance map analysis with file load estimation
+- `combinedodm_distancemap_dialog_base.ui` - UI definition for Combined model dialog with hint labels
+- `odm_reach_dialog.py` - Generic ODM reachability analysis with file load estimation
 - `odm_reach_dialog_base.ui` - UI definition for ODM Reach dialog
-- `poi_combined_reach_dialog.py` - POI combined reachability analysis
+- `poi_combined_reach_dialog.py` - POI combined reachability analysis with grouping, weighting, and decay options
+- `poi_combined_reach_dialog_base.ui` - UI definition for POI Combined Reach dialog with hint labels and suffix field
 - `combinedreach_analysis_dialog.py` - Combined reach analysis utility
 
 ### Analytics Module
-- `Analytics/IO.py` - ODM file reading and processing utilities
-- `Analytics/Access.py` - Accessibility analysis functions
+- `Analytics/IO.py` - ODM file reading and processing utilities; file load time estimation
+- `Analytics/Access.py` - Accessibility analysis functions; PTODM_ByOrigin with performance timing measurements
 
 ### Resources
 - `icons/` - Toolbar and menu icons for analysis tools
+
+## Features:
+
+### POI Combined Reach Dialog
+- **Group attribute selection** - Group POIs by custom attributes
+- **Weight attribute selection** - Weight POIs by custom numeric attributes
+- **Decay analysis** - Apply decay functions to POI reachability
+- **File load estimation** - Real-time estimates of file loading duration
+- **Settings persistence** - All parameters saved and restored across sessions
+- **Informational hints** - Visual guidance for input parameters with grey-colored helper text
 
 
 ### Datasets (ODMs)
