@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>POI Combined Reach (Walking and Public transportation)</string>
+   <string>Combined POI Reach (Walking and/or Public transportation)</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -129,6 +129,46 @@
      <item>
       <widget class="QgsFieldComboBox" name="poiGroupAttrSelector"/>
      </item>
+     <item>
+      <widget class="QCheckBox" name="checkBox_UseGroups">
+       <property name="text">
+        <string>Use Groups</string>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_WeightAttr">
+     <item>
+      <widget class="QLabel" name="label_weight_attr">
+       <property name="minimumWidth">
+        <number>190</number>
+       </property>
+       <property name="maximumWidth">
+        <number>190</number>
+       </property>
+       <property name="text">
+        <string>Weight Attribute Name</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFieldComboBox" name="weightAttributeSelector"/>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="checkBox_UseWeights">
+       <property name="text">
+        <string>Use Weights</string>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>
@@ -226,7 +266,7 @@
       </font>
      </property>
      <property name="title">
-      <string>Optiojns</string>
+      <string>Options</string>
      </property>
      <widget class="QLabel" name="label_5">
       <property name="geometry">
@@ -258,6 +298,22 @@
       </property>
       <property name="value">
        <double>30.000000000000000</double>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_max_walk_dest_hint">
+      <property name="geometry">
+       <rect>
+        <x>350</x>
+        <y>25</y>
+        <width>350</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string>color: rgb(100, 100, 100);</string>
+      </property>
+      <property name="text">
+       <string>This is the time limit to reach the destination without using PT.</string>
       </property>
      </widget>
      <widget class="QLabel" name="label_6">
@@ -324,6 +380,22 @@
        <double>4.500000000000000</double>
       </property>
      </widget>
+     <widget class="QLabel" name="label_walk_speed_hint">
+      <property name="geometry">
+       <rect>
+        <x>350</x>
+        <y>85</y>
+        <width>350</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string>color: rgb(100, 100, 100);</string>
+      </property>
+      <property name="text">
+       <string>4.5km/h for walking, 16km/h for cycling</string>
+      </property>
+     </widget>
      <widget class="QLabel" name="label_7">
       <property name="geometry">
        <rect>
@@ -354,6 +426,22 @@
       </property>
       <property name="value">
        <double>60.000000000000000</double>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_max_total_time_hint">
+      <property name="geometry">
+       <rect>
+        <x>350</x>
+        <y>115</y>
+        <width>350</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string>color: rgb(100, 100, 100);</string>
+      </property>
+      <property name="text">
+       <string>This is maximum combined time for walking and transit</string>
       </property>
      </widget>
      <widget class="QLabel" name="label_decay_platoo">
@@ -388,6 +476,22 @@
        <double>10.000000000000000</double>
       </property>
      </widget>
+     <widget class="QLabel" name="label_decay_platoo_hint">
+      <property name="geometry">
+       <rect>
+        <x>350</x>
+        <y>145</y>
+        <width>350</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string>color: rgb(100, 100, 100);</string>
+      </property>
+      <property name="text">
+       <string>For the duration of this time, no decay is applied.</string>
+      </property>
+     </widget>
      <widget class="QLabel" name="label_half_decay">
       <property name="geometry">
        <rect>
@@ -420,6 +524,22 @@
        <double>5.000000000000000</double>
       </property>
      </widget>
+     <widget class="QLabel" name="label_half_decay_hint">
+      <property name="geometry">
+       <rect>
+        <x>350</x>
+        <y>175</y>
+        <width>350</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string>color: rgb(100, 100, 100);</string>
+      </property>
+      <property name="text">
+       <string>Half-decay means the probability is reduced by 50% after the plateau.</string>
+      </property>
+     </widget>
      <widget class="QCheckBox" name="checkBox_IncludeTransit">
       <property name="geometry">
        <rect>
@@ -434,6 +554,22 @@
       </property>
       <property name="checked">
        <bool>true</bool>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBox_UseDecay">
+      <property name="geometry">
+       <rect>
+        <x>190</x>
+        <y>200</y>
+        <width>150</width>
+        <height>30</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Use Decay</string>
+      </property>
+      <property name="checked">
+       <bool>false</bool>
       </property>
      </widget>
     </widget>
@@ -479,6 +615,9 @@
         </item>
         <item>
          <widget class="QLineEdit" name="exportPrefixInput">
+          <property name="minimumHeight">
+           <number>20</number>
+          </property>
           <property name="text">
            <string>W15</string>
           </property>

@@ -31,7 +31,7 @@ except Exception:
 
 
 
-from .Analytics.IO import read_ODM, estimate_sqlite_load_time, get_sqlite_info, quick_estimate_from_filesize
+from .Analytics.IO import read_ODM, get_sqlite_info, quick_estimate_from_filesize
 
 
 UI_PATH = os.path.join(os.path.dirname(__file__), 'odm_reach_dialog_base.ui')
@@ -60,7 +60,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             try:
                 for lay in QgsProject.instance().mapLayers().values():
                     try:
-                        self.layer_field_map.setdefault(lay.id(), {'id_field': None})
+                        self.layer_field_map.setdefault(lay.id(), {'id_field': None, 'weight_field': None})
                     except Exception:
                         continue
             except Exception:
@@ -196,12 +196,21 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             # Save checkboxes
             settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_OnlySelectedFeatures', 
                             self.onlySelectedFeatures.isChecked())
+            settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_UseGroups',
+                            self.checkBox_UseGroups.isChecked())
+            settings.setValue('DiscreteProximityFramework/ODMReach_CheckBox_UseWeights',
+                            self.checkBox_UseWeights.isChecked())
             
             # Save field selectors
             id_sel = self._get_id_selector()
+            weight_sel = self._get_weight_selector()
             id_field = self._get_current_field(id_sel)
+            weight_field = self._get_current_field(weight_sel)
+            
             if id_field:
                 settings.setValue('DiscreteProximityFramework/ODMReach_IdField', id_field)
+            if weight_field:
+                settings.setValue('DiscreteProximityFramework/ODMReach_WeightField', weight_field)
             
             self._log("Saved settings")
         except Exception as e:
@@ -213,19 +222,29 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         try:
             # Load checkboxes with sensible defaults
             only_selected = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_OnlySelectedFeatures', False, type=bool)
+            use_groups = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_UseGroups', False, type=bool)
+            use_weights = settings.value('DiscreteProximityFramework/ODMReach_CheckBox_UseWeights', False, type=bool)
             
             # Apply checkbox settings
             if hasattr(self, 'onlySelectedFeatures'):
                 self.onlySelectedFeatures.setChecked(only_selected)
+            if hasattr(self, 'checkBox_UseGroups'):
+                self.checkBox_UseGroups.setChecked(use_groups)
+            if hasattr(self, 'checkBox_UseWeights'):
+                self.checkBox_UseWeights.setChecked(use_weights)
             
             # Load field selectors
             id_field = settings.value('DiscreteProximityFramework/ODMReach_IdField', '', type=str)
+            weight_field = settings.value('DiscreteProximityFramework/ODMReach_WeightField', '', type=str)
             
             id_sel = self._get_id_selector()
+            weight_sel = self._get_weight_selector()
             
             # Try to set saved field selections
             if id_field and id_sel is not None:
                 self._try_set_selector_by_name(id_sel, id_field)
+            if weight_field and weight_sel is not None:
+                self._try_set_selector_by_name(weight_sel, weight_field)
             
             self._log("Loaded settings")
         except Exception as e:
@@ -237,9 +256,11 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         if not layer_id:
             return
         id_sel = self._get_id_selector()
+        weight_sel = self._get_weight_selector()
         id_field = self._get_current_field(id_sel)
-        self.layer_field_map[layer_id] = {'id_field': id_field}
-        self._log(f"Saved mapping for {layer_id}: id_field={id_field}")
+        weight_field = self._get_current_field(weight_sel)
+        self.layer_field_map[layer_id] = {'id_field': id_field, 'weight_field': weight_field}
+        self._log(f"Saved mapping for {layer_id}: id_field={id_field}, weight_field={weight_field}")
 
     def _try_set_selector_by_name(self, selector, field_name):
         if selector is None or not field_name:
@@ -267,9 +288,12 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         if not data:
             return False
         id_sel = self._get_id_selector()
+        weight_sel = self._get_weight_selector()
         restored = False
         if id_sel is not None and data.get('id_field'):
             restored = self._try_set_selector_by_name(id_sel, data.get('id_field')) or restored
+        if weight_sel is not None and data.get('weight_field'):
+            restored = self._try_set_selector_by_name(weight_sel, data.get('weight_field')) or restored
 
         if not restored and QgsProject is not None:
             # schedule a retry after UI finishes populating
@@ -286,6 +310,8 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                     fields = []
                 if id_sel is not None and data.get('id_field') in fields:
                     self._try_set_selector_by_name(id_sel, data.get('id_field'))
+                if weight_sel is not None and data.get('weight_field') in fields:
+                    self._try_set_selector_by_name(weight_sel, data.get('weight_field'))
             try:
                 QTimer.singleShot(0, retry)
             except Exception:
@@ -338,6 +364,10 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         """Return id selector."""
         return getattr(self, 'IdFieldSelector', None) or getattr(self, 'idSelector', None)
 
+    def _get_weight_selector(self):
+        """Return weight attribute selector."""
+        return getattr(self, 'weightAttributeSelector', None)
+
     def _get_current_field(self, selector):
         if selector is None:
             return None
@@ -380,59 +410,6 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         # Load settings
         self.load_settings()
 
-    def display_sqlite_info(self):
-        """Display SQLite file information and loading time estimate."""
-        odm_path = self.fileSelector.filePath()
-        
-        if not odm_path or not os.path.exists(odm_path):
-            self.labelCurrentStatus.setText("No ODM file selected")
-            return
-        
-        try:
-            # Show quick estimate immediately (file size only)
-            quick_est = quick_estimate_from_filesize(odm_path)
-            self.labelCurrentStatus.setText(f"ODM: {os.path.basename(odm_path)} | Size: {quick_est['file_size_mb']:.1f} MB | Quick est: {quick_est['estimated_string']}")
-            self.repaint()
-            QCoreApplication.processEvents()
-            
-            # Get detailed file info
-            info = get_sqlite_info(odm_path)
-            if 'error' in info:
-                self.labelCurrentStatus.setText(f"Error reading file info: {info['error']}")
-                return
-            
-            # Get detailed load time estimate (with row counts)
-            estimate = estimate_sqlite_load_time(odm_path)
-            
-            # Display comprehensive info
-            status_text = (
-                f"ODM: {os.path.basename(odm_path)} | "
-                f"Size: {info['file_size_mb']:.1f} MB | "
-                f"Rows: {info['total_rows']:,} | "
-                f"Origins: {info['unique_origins']:,} | "
-                f"Est: {estimate['estimated_string']}"
-            )
-            self.labelCurrentStatus.setText(status_text)
-            
-            # Log detailed info
-            self._log("=== SQLite ODM File Info ===")
-            self._log(f"File: {os.path.basename(odm_path)}")
-            self._log(f"Size: {info['file_size_mb']:.2f} MB")
-            self._log(f"Quick estimate (file size only): {quick_est['estimated_string']}")
-            self._log(f"Detailed estimate (full info): {estimate['estimated_string']}")
-            self._log(f"Total rows: {info['total_rows']:,}")
-            self._log(f"Unique origins: {info['unique_origins']:,}")
-            self._log(f"Unique destinations: {info['unique_destinations']:,}")
-            self._log(f"Rows per origin: {info['rows_per_origin']:.0f}")
-            self._log(f"Distance range: {info['min_distance']:.0f}m - {info['max_distance']:.0f}m (avg: {info['avg_distance']:.0f}m)")
-            self._log(f"  File read time: {estimate['file_read_time']:.2f}s")
-            self._log(f"  Processing time: {estimate['processing_time']:.2f}s")
-            self._log("===========================")
-            
-        except Exception as e:
-            self._log(f"Error displaying SQLite info: {str(e)}")
-            self.labelCurrentStatus.setText(f"Error: {str(e)}")
-
     def updateLayer(self, layer):
         # allow signals to call with None and resolve currentLayer
         if layer is None:
@@ -444,6 +421,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                     layer = None
 
         id_sel = self._get_id_selector()
+        weight_sel = self._get_weight_selector()
 
         # disconnect previous handlers
         try:
@@ -459,6 +437,11 @@ class ODMReachDialog(QDialog, FORM_CLASS):
         if id_sel is not None and hasattr(id_sel, 'setLayer'):
             try:
                 id_sel.setLayer(layer)
+            except Exception:
+                pass
+        if weight_sel is not None and hasattr(weight_sel, 'setLayer'):
+            try:
+                weight_sel.setLayer(layer)
             except Exception:
                 pass
 
@@ -511,6 +494,7 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                 layer = None
 
         id_field_name = None
+        weight_field_name = None
         if layer is not None:
             try:
                 fields = list(layer.fields())
@@ -522,14 +506,21 @@ class ODMReachDialog(QDialog, FORM_CLASS):
             # Try to get saved field names from QSettings
             settings = QSettings()
             saved_id_field = settings.value('DiscreteProximityFramework/ODMReach_IdField', '', type=str)
+            saved_weight_field = settings.value('DiscreteProximityFramework/ODMReach_WeightField', '', type=str)
             
             # Use saved field if it exists in this layer, otherwise use first field
             if saved_id_field and saved_id_field in field_names:
                 id_field_name = saved_id_field
             elif fields:
                 id_field_name = fields[0].name()
+            
+            if saved_weight_field and saved_weight_field in field_names:
+                weight_field_name = saved_weight_field
+            elif len(fields) > 1:
+                weight_field_name = fields[1].name()
 
         id_sel = self._get_id_selector()
+        weight_sel = self._get_weight_selector()
         
         if id_sel is not None and id_field_name:
             try:
@@ -537,6 +528,15 @@ class ODMReachDialog(QDialog, FORM_CLASS):
                     id_sel.setCurrentField(id_field_name)
                 else:
                     self._try_set_selector_by_name(id_sel, id_field_name)
+            except Exception:
+                pass
+        
+        if weight_sel is not None and weight_field_name:
+            try:
+                if hasattr(weight_sel, 'setCurrentField'):
+                    weight_sel.setCurrentField(weight_field_name)
+                else:
+                    self._try_set_selector_by_name(weight_sel, weight_field_name)
             except Exception:
                 pass
 

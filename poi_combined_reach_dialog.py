@@ -33,7 +33,7 @@ except Exception:
     Qgis = None
     QgsProject = None
 
-from .Analytics.IO import read_ODM, read_GTFS, estimate_sqlite_load_time, get_sqlite_info, quick_estimate_from_filesize
+from .Analytics.IO import read_ODM, read_GTFS, get_sqlite_info, quick_estimate_from_filesize
 from .Analytics.Access import PTODM_ByOrigin
 
 
@@ -169,6 +169,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
         settings.setValue(f'{SETTINGS_KEY}/DecayPlatoo', self.decayPlatoo.value())
         settings.setValue(f'{SETTINGS_KEY}/HalfDecayDuration', self.halfDecayDuration.value())
         settings.setValue(f'{SETTINGS_KEY}/IncludeTransit', self.checkBox_IncludeTransit.isChecked())
+        settings.setValue(f'{SETTINGS_KEY}/UseDecay', self.checkBox_UseDecay.isChecked())
 
         # Save settings
         self.save_settings()
@@ -255,11 +256,15 @@ class POICombinedReach(QDialog, FORM_CLASS):
             self.decayPlatoo.setValue(10.0)
             self.halfDecayDuration.setValue(5.0)
             
+            # Reset checkboxes to defaults
+            if hasattr(self, 'checkBox_UseDecay'):
+                self.checkBox_UseDecay.setChecked(False)
+            
             # Reset prefix text box to default
             if hasattr(self, 'exportPrefixInput'):
                 self.exportPrefixInput.setText('W15')
             
-            self._log('All numeric values and prefix reset to defaults')
+            self._log('All numeric values, checkboxes, and prefix reset to defaults')
         except Exception as e:
             self._log(f'Error during reset: {str(e)}', level='debug')
 
@@ -285,6 +290,12 @@ class POICombinedReach(QDialog, FORM_CLASS):
                             self.onlySelectedFeatures.isChecked())
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_IncludeTransit',
                             self.checkBox_IncludeTransit.isChecked())
+            settings.setValue(f'{SETTINGS_KEY}/CheckBox_UseDecay',
+                            self.checkBox_UseDecay.isChecked())
+            settings.setValue(f'{SETTINGS_KEY}/CheckBox_UseGroups',
+                            self.checkBox_UseGroups.isChecked())
+            settings.setValue(f'{SETTINGS_KEY}/CheckBox_UseWeights',
+                            self.checkBox_UseWeights.isChecked())
             
             # Save export prefix
             export_prefix_input = getattr(self, 'exportPrefixInput', None)
@@ -309,6 +320,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
             
             poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
             poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+            weight_sel = self._get_weight_selector()
             if poi_grid_id_sel is not None:
                 poi_grid_id_field = self._get_current_field(poi_grid_id_sel)
                 if poi_grid_id_field:
@@ -317,6 +329,10 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 poi_group_attr_field = self._get_current_field(poi_group_attr_sel)
                 if poi_group_attr_field:
                     settings.setValue(f'{SETTINGS_KEY}/POIGroupAttrField', poi_group_attr_field)
+            if weight_sel is not None:
+                weight_field = self._get_current_field(weight_sel)
+                if weight_field:
+                    settings.setValue(f'{SETTINGS_KEY}/POIWeightField', weight_field)
             
             self._log("Saved combined model settings")
         except Exception as e:
@@ -329,11 +345,20 @@ class POICombinedReach(QDialog, FORM_CLASS):
             # Load checkboxes
             only_selected = settings.value(f'{SETTINGS_KEY}/CheckBox_OnlySelectedFeatures', False, type=bool)
             include_transit = settings.value(f'{SETTINGS_KEY}/CheckBox_IncludeTransit', True, type=bool)
+            use_decay = settings.value(f'{SETTINGS_KEY}/CheckBox_UseDecay', False, type=bool)
+            use_groups = settings.value(f'{SETTINGS_KEY}/CheckBox_UseGroups', False, type=bool)
+            use_weights = settings.value(f'{SETTINGS_KEY}/CheckBox_UseWeights', False, type=bool)
             
             if hasattr(self, 'onlySelectedFeatures'):
                 self.onlySelectedFeatures.setChecked(only_selected)
             if hasattr(self, 'checkBox_IncludeTransit'):
                 self.checkBox_IncludeTransit.setChecked(include_transit)
+            if hasattr(self, 'checkBox_UseDecay'):
+                self.checkBox_UseDecay.setChecked(use_decay)
+            if hasattr(self, 'checkBox_UseGroups'):
+                self.checkBox_UseGroups.setChecked(use_groups)
+            if hasattr(self, 'checkBox_UseWeights'):
+                self.checkBox_UseWeights.setChecked(use_weights)
             
             # Load export prefix
             export_prefix = settings.value(f'{SETTINGS_KEY}/ExportPrefix', 'W15', type=str)
@@ -362,14 +387,18 @@ class POICombinedReach(QDialog, FORM_CLASS):
             # Load POI attribute selectors
             poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
             poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
+            weight_field = settings.value(f'{SETTINGS_KEY}/POIWeightField', '', type=str)
             
             poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
             poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+            weight_sel = self._get_weight_selector()
             
             if poi_grid_id_field and poi_grid_id_sel is not None:
                 self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
             if poi_group_attr_field and poi_group_attr_sel is not None:
                 self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
+            if weight_field and weight_sel is not None:
+                self._try_set_selector_by_name(weight_sel, weight_field)
             
             self._log("Loaded combined model settings")
         except Exception as e:
@@ -459,6 +488,10 @@ class POICombinedReach(QDialog, FORM_CLASS):
     def _get_name_selector(self):
         """Return name selector."""
         return getattr(self, 'NameFieldSelector', None) or getattr(self, 'nameSelector', None)
+
+    def _get_weight_selector(self):
+        """Return weight attribute selector for POI layer."""
+        return getattr(self, 'weightAttributeSelector', None)
 
     def _get_current_field(self, selector):
         if selector is None:
@@ -692,6 +725,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
 
         poi_grid_id_sel = getattr(self, 'poiGridIdNameSelector', None)
         poi_group_attr_sel = getattr(self, 'poiGroupAttrSelector', None)
+        weight_sel = self._get_weight_selector()
 
         # Set layer for selectors
         if poi_grid_id_sel is not None and hasattr(poi_grid_id_sel, 'setLayer'):
@@ -704,6 +738,11 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 poi_group_attr_sel.setLayer(layer)
             except Exception:
                 pass
+        if weight_sel is not None and hasattr(weight_sel, 'setLayer'):
+            try:
+                weight_sel.setLayer(layer)
+            except Exception:
+                pass
         
         self._log(f"updatePOILayer: set to {layer.name() if layer else 'None'}")
 
@@ -713,13 +752,16 @@ class POICombinedReach(QDialog, FORM_CLASS):
             try:
                 poi_grid_id_field = settings.value(f'{SETTINGS_KEY}/POIGridIdNameField', '', type=str)
                 poi_group_attr_field = settings.value(f'{SETTINGS_KEY}/POIGroupAttrField', '', type=str)
+                weight_field = settings.value(f'{SETTINGS_KEY}/POIWeightField', '', type=str)
                 
                 if poi_grid_id_field and poi_grid_id_sel is not None:
                     self._try_set_selector_by_name(poi_grid_id_sel, poi_grid_id_field)
                 if poi_group_attr_field and poi_group_attr_sel is not None:
                     self._try_set_selector_by_name(poi_group_attr_sel, poi_group_attr_field)
+                if weight_field and weight_sel is not None:
+                    self._try_set_selector_by_name(weight_sel, weight_field)
                 
-                self._log(f"Restored POI attributes: grid_id={poi_grid_id_field}, group_attr={poi_group_attr_field}")
+                self._log(f"Restored POI attributes: grid_id={poi_grid_id_field}, group_attr={poi_group_attr_field}, weight={weight_field}")
             except Exception as e:
                 self._log(f"Error restoring POI attributes: {str(e)}", level='debug')
 
@@ -814,8 +856,9 @@ class POICombinedReach(QDialog, FORM_CLASS):
 
         max_walk_dest_meters = self.maxWalkDest.value() * self.walkingSpeed.value() * 1000 / 60
 
-
-        self.labelCurrentStatus.setText("Reading Active ODM...")
+        # Show estimate for Active ODM
+        estimate_active = quick_estimate_from_filesize(self.activeODM_fileSelector.filePath())
+        self.labelCurrentStatus.setText(f"Reading Active ODM... (est. {estimate_active['estimated_string']})")
         self.repaint()
         step_start = time.time()
         # Convert max walking time (minutes) to distance (meters) using walking speed
@@ -830,7 +873,9 @@ class POICombinedReach(QDialog, FORM_CLASS):
         step_duration = time.time() - step_start
         self._log(f"Read Active ODM in {step_duration:.3f}s")
 
-        self.labelCurrentStatus.setText("Reading Walk-to-Station ODM...")
+        # Show estimate for Walk-to-Station ODM
+        estimate_walkstation = quick_estimate_from_filesize(self.walkStation_fileSelector.filePath())
+        self.labelCurrentStatus.setText(f"Reading Walk-to-Station ODM... (est. {estimate_walkstation['estimated_string']})")
         self.repaint()
         step_start = time.time()
         # Convert max walking time (minutes) to distance (meters) using walking speed
@@ -845,7 +890,9 @@ class POICombinedReach(QDialog, FORM_CLASS):
         step_duration = time.time() - step_start
         self._log(f"Read Walk-to-Station ODM in {step_duration:.3f}s")
 
-        self.labelCurrentStatus.setText("Reading GTFS Transit...")
+        # Show estimate for GTFS Transit
+        estimate_gtfs = quick_estimate_from_filesize(self.GTFS_fileSelector.filePath())
+        self.labelCurrentStatus.setText(f"Reading GTFS Transit... (est. {estimate_gtfs['estimated_string']})")
         self.repaint()
         step_start = time.time()
         TravelODM = read_GTFS(filepath= self.GTFS_fileSelector.filePath(), 

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>713</width>
-    <height>300</height>
+    <height>375</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -115,6 +115,88 @@
       <enum>Qt::Horizontal</enum>
      </property>
     </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_poigroups">
+     <item>
+      <widget class="QLabel" name="label_poigroups">
+       <property name="minimumSize">
+        <size>
+         <width>190</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>190</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>POI Layer Group Attribute</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="checkBox_UseGroups">
+       <property name="text">
+        <string>Use Groups</string>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_groups">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_poiweights">
+     <item>
+      <widget class="QLabel" name="label_poiweights">
+       <property name="minimumSize">
+        <size>
+         <width>190</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>190</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Weight Attribute Name</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QgsFieldComboBox" name="weightAttributeSelector"/>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="checkBox_UseWeights">
+       <property name="text">
+        <string>Use Weights</string>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
     <widget class="QgsCollapsibleGroupBox" name="mGroupBox_2">
