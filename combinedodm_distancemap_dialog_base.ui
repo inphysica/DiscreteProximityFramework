@@ -193,6 +193,22 @@
        <double>30.000000000000000</double>
       </property>
      </widget>
+     <widget class="QLabel" name="label_max_walk_dest_hint">
+      <property name="geometry">
+       <rect>
+        <x>350</x>
+        <y>25</y>
+        <width>350</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string>color: rgb(100, 100, 100);</string>
+      </property>
+      <property name="text">
+       <string>This is the time limit to reach the destination without using PT.</string>
+      </property>
+     </widget>
      <widget class="QLabel" name="label_6">
       <property name="geometry">
        <rect>
