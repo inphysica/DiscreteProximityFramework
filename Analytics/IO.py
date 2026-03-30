@@ -207,6 +207,10 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
         distance = row[2]
         duration = row[3]
 
+
+        # if origin == "EE-125mN6590375E542375":
+        #     print(duration, max_duration)
+
         if remove_prefix:
             if "-" in origin:
                 origin = origin.split("-")[-1]
@@ -254,6 +258,12 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
     time_diff = datetime.now() - stamp_0
     print( " -> time:  %s[s]" % time_diff)
     print( " -> total: %s skipped: %s kept: %s" % (len(rows), skipped , len(rows) - skipped ))
+    print( " -> unique origins: %s" % len(D))
+
+    # if "EE-125mN6590375E542375" in D:
+    #     print("Example entry for EE-125mN6590375E542375:", D["EE-125mN6590375E542375"])
+    # else:
+    #     print("Example entry for EE-125mN6590375E542375 not found in D")
 
     return D
 
@@ -332,6 +342,6 @@ def read_GTFS(filepath, max_duration = 0, bar = None):
     time_diff = datetime.now() - stamp_0
     print( " -> time:  %s[s]" % time_diff)
     print( " -> total: %s skipped: %s kept: %s" % (len(rows), skipped , len(rows) - skipped ))
-    
+    print( " -> unique origins: %s" % len(PT))
 
     return PT

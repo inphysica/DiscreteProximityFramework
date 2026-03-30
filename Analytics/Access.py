@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta
+import time
 import math
 
-def LogisticDicay(x, Plato, Half):
+def LogisticDicay(x, Plato, Half, Growth_Rate):
+
+
+    # growth_rate = math.log(9999) / Half
 
     if x < Plato: return 1
     if x > Plato + 2 * Half: return 0
@@ -19,18 +23,114 @@ def LogisticDicay(x, Plato, Half):
 
     else:
 
-        growth_rate = math.log(9999) / Half
+        # growth_rate = math.log(9999) / Half
         g = 1 - (1 / (1 + math.exp(-growth_rate * (x0 - Half))))
 
         return g
 
 
 
-
 # Analytics.Reach_wDecay(Park_ODM, 400, 200, Park_W)
 
 
+def POIREach_wDecay(POIs, ODM, origin_selection, Max_Duration, Plato, Half, Use_Decay = True, Use_Groups = False, Suffix = "", bar = None):
 
+    """
+
+    DESCRIPTION:
+
+        This function calculated the reach for each origin and for all POI groups. 
+
+
+    ARGUMENTS:
+        POIs                : [Group][Destination] = weights,
+        ODM                 : [origin][destination] = duration
+        origin_selection    : [origin]
+        Max_Duration        : Maximum duration for reach calculation (in minutes)
+        Plato               : Duration at which decay starts (in minutes)  
+        Half                : Half-life of the decay function (in minutes)
+        Use_Decay           : If False, decay is not applied.
+        Use_Groups          : If True, reach is calculated by group. If False, reach is calculated by destination.
+        Prefix              : If provided when resuts are saved with poi group name and prefix. group_prefix.
+        bar                 : Progress bar to update during processing (optional)
+
+    RETURN:
+        Reach               : [origin][POI Group or Prefix] = reach value
+
+    """
+
+    POI_DEFAULT_KEY = "__"
+
+
+    Reach = {}
+
+    if bar is not None:
+        bar.setMaximum(len(origin_selection))
+        bar.setValue(0)
+        bar.repaint()
+
+
+    if Use_Groups:
+        groups = list(POIs.keys())
+        groups.sort()
+        groups_wSuffix = [group + "_" + Suffix for group in groups]
+    else:
+        groups = [Suffix]
+        groups_wSuffix = [Suffix]
+    
+    
+    Growth_Rate = math.log(9999) / Half
+
+    for i, origin in enumerate(origin_selection):
+
+        bar.setValue(i)
+        bar.repaint()
+
+        Reach[origin] = {}
+
+        if Use_Groups:
+
+            for group in groups:
+                group_suffix = group + "_" +  Suffix
+                Reach[origin][group_suffix] = 0
+
+            for group in groups:
+                group_suffix = group + "_" +  Suffix
+                for destination in POIs[group]:
+
+                    if origin not in ODM:
+                        continue
+                    if destination not in ODM[origin]:
+                        continue
+                    
+                    duration = ODM[origin][destination]
+                    if duration > Max_Duration:
+                        continue
+
+                    Reach[origin][group_suffix] += logistic_decay(duration, Plato, Half, Growth_Rate) * POIs[group][destination] if Use_Decay else POIs[group][destination]
+
+
+            #print(f"Origin: {origin}, Reach: {Reach[origin]}")
+
+        else:
+
+            Reach[origin][Suffix] = 0 
+
+            POI_ODM = {}
+
+            for destination in POIs[POI_DEFAULT_KEY]:
+                if origin not in ODM:
+                    continue
+                if destination not in ODM[origin]:
+                    continue
+                
+                duration = ODM[origin][destination]
+                if duration > Max_Duration:
+                    continue
+
+                Reach[origin][Suffix] += logistic_decay(duration, Plato, Half, Growth_Rate) * POIs[POI_DEFAULT_KEY][destination] if Use_Decay else POIs[POI_DEFAULT_KEY][destination]
+
+    return Reach, groups_wSuffix
 
 def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, DestinationSelection, max_total_duration, max_walking_duration = 15, max_direct_walking_duration = 15, bar = None):
 
@@ -70,14 +170,12 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
     RETURN:
 
         ODM                 : [origin][destination] = best duration betweeen origin to destintion.  Origin and destinations can be 
-
         # Sations             : [origin][station][destinations] 
 
-    
     """
 
-
-    stamp_0 = datetime.now()
+    step_start = time.time()
+    function_start = time.time()
 
     skipped = 0
     ValidPT_byDestination = {}
@@ -88,6 +186,8 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
     bar.setValue(0)
     bar.repaint()
 
+    # LOOP 1: Validate PT destinations
+    loop1_start = time.time()
     for i, grd_id in enumerate(DestinationSelection):
         
         bar.setValue(i)
@@ -110,7 +210,9 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
 
             ValidPT_byDestination[grd_id][pt] = duration_walking
 
+    loop1_duration = time.time() - loop1_start
     print( " -> total: %s skipped: %s kept: %s" % (len(DestinationSelection), skipped, len(DestinationSelection) - skipped))
+    print(f"[PTODM_ByOrigin] LOOP 1 (Destination validation): {loop1_duration:.3f}s")
 
     if len(DestinationSelection) - skipped == 0:
         print("There are no destination in range!")
@@ -122,6 +224,38 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
 
     ODM = {}
 
+
+    # LOOP 2: Process walking routes
+    loop2_start = time.time()
+    bar.setMaximum(len(WalkingODM))
+    bar.setValue(0)
+    bar.repaint()
+
+    for i, o in enumerate(WalkingODM):
+
+        bar.setValue(i)
+        bar.repaint()
+        
+        if hasSelection:
+            if o not in OriginSelection:
+                continue
+
+        ODM[o] = {}
+        for d in WalkingODM[o]:
+            if o == d:
+                ODM[o][d] = 0
+            elif o in WalkingODM and d in WalkingODM[o]:
+                distance, duration = WalkingODM[o][d]
+                if duration <= max_direct_walking_duration:
+                    ODM[o][d] = duration
+
+    loop2_duration = time.time() - loop2_start
+    print(f"[PTODM_ByOrigin] LOOP 2 (Walking routes): {loop2_duration:.3f}s")
+
+    
+
+    # LOOP 3: Process PT routes
+    loop3_start = time.time()
     bar.setMaximum(len(PTAccess))
     bar.setValue(0)
     bar.repaint()
@@ -135,8 +269,8 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
             if o not in OriginSelection:
                 continue
 
-
-        ODM[o] = {} 
+        if o not in ODM:
+            ODM[o] = {} 
 
         best_duration_byExit = {} # [last stop] =  best duration
 
@@ -168,7 +302,7 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
 
         # we only look last step for set
 
-        s = 0
+        # s = 0
 
         for destination in ValidPT_byDestination:
 
@@ -200,6 +334,7 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
                 traveling_duration =  L[0]
                 walking_distance = walking_duration = float("inf")
                 
+
                 if o in WalkingODM:
                     if destination in WalkingODM[o]:
 
@@ -215,10 +350,18 @@ def PTODM_ByOrigin(  PTAccess, PTTravel, WalkingODM, OriginSelection, Destinatio
 
                 ODM[o][destination] = best_duration
 
-            if destination not in DestinationWeights:
-                s += 0
-            else:
-                s += DestinationWeights[destination]
+            # if destination not in DestinationWeights:
+            #     s += 0
+            # else:
+            #     s += DestinationWeights[destination]
 
+    loop3_duration = time.time() - loop3_start
+    print(f"[PTODM_ByOrigin] LOOP 3 (PT routes): {loop3_duration:.3f}s")
+    
+    total_duration = time.time() - function_start
+    print(f"[PTODM_ByOrigin] TOTAL TIME: {total_duration:.3f}s")
+    print(f"[PTODM_ByOrigin] Summary - Destinations validated: {len(DestinationSelection)}, Walking origins: {len(WalkingODM)}, PT origins: {len(PTAccess)}")
+    print(f"[PTODM_ByOrigin] Result: {len(ODM)} origins in ODM")
+    print()
 
     return ODM
