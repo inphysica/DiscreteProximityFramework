@@ -34,7 +34,7 @@ except Exception:
     QgsProject = None
 
 from .Analytics.IO import read_ODM, read_GTFS, get_sqlite_info, quick_estimate_from_filesize
-from .Analytics.Access import PTODM_ByOrigin
+from .Analytics.Access import PTODM_ByOrigin, POIREach_wDecay
 
 
 def _qvariant_to_python(value):
@@ -84,7 +84,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
         super().__init__(parent)
         self.iface = iface
         self.layer_field_map = {}  # layer_id -> {'id_field': str, 'name_field': str}
-        self.current_layer_id = None
+        self.grid_layer = None
         self._id_selector_conn = None
         self._name_selector_conn = None
 
@@ -241,7 +241,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
                     pass
 
     def _on_reset(self):
-        """Reset all numeric values and prefix text box to defaults."""
+        """Reset all numeric values and suffix text box to defaults."""
         try:
             self._log('Reset pressed')
         except Exception:
@@ -260,11 +260,11 @@ class POICombinedReach(QDialog, FORM_CLASS):
             if hasattr(self, 'checkBox_UseDecay'):
                 self.checkBox_UseDecay.setChecked(False)
             
-            # Reset prefix text box to default
-            if hasattr(self, 'exportPrefixInput'):
-                self.exportPrefixInput.setText('W15')
+            # Reset suffix text box to default
+            if hasattr(self, 'exportSuffixInput'):
+                self.exportSuffixInput.setText('W15')
             
-            self._log('All numeric values, checkboxes, and prefix reset to defaults')
+            self._log('All numeric values, checkboxes, and suffix reset to defaults')
         except Exception as e:
             self._log(f'Error during reset: {str(e)}', level='debug')
 
@@ -297,10 +297,10 @@ class POICombinedReach(QDialog, FORM_CLASS):
             settings.setValue(f'{SETTINGS_KEY}/CheckBox_UseWeights',
                             self.checkBox_UseWeights.isChecked())
             
-            # Save export prefix
-            export_prefix_input = getattr(self, 'exportPrefixInput', None)
-            if export_prefix_input is not None:
-                settings.setValue(f'{SETTINGS_KEY}/ExportPrefix', export_prefix_input.text())
+            # Save export suffix
+            export_suffix_input = getattr(self, 'exportSuffixInput', None)
+            if export_suffix_input is not None:
+                settings.setValue(f'{SETTINGS_KEY}/ExportSuffix', export_suffix_input.text())
             
             # Save field selectors
             id_sel = self._get_id_selector()
@@ -360,10 +360,10 @@ class POICombinedReach(QDialog, FORM_CLASS):
             if hasattr(self, 'checkBox_UseWeights'):
                 self.checkBox_UseWeights.setChecked(use_weights)
             
-            # Load export prefix
-            export_prefix = settings.value(f'{SETTINGS_KEY}/ExportPrefix', 'W15', type=str)
-            if hasattr(self, 'exportPrefixInput'):
-                self.exportPrefixInput.setText(export_prefix)
+            # Load export suffix
+            export_suffix = settings.value(f'{SETTINGS_KEY}/ExportSuffix', 'W15', type=str)
+            if hasattr(self, 'exportSuffixInput'):
+                self.exportSuffixInput.setText(export_suffix)
             
             # Load field selectors
             id_field = settings.value(f'{SETTINGS_KEY}/IdField', '', type=str)
@@ -406,7 +406,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
 
     def _save_current_selection(self, layer_id=None):
         if layer_id is None:
-            layer_id = self.current_layer_id
+            layer_id = self.grid_layer
         if not layer_id:
             return
         id_sel = self._get_id_selector()
@@ -602,16 +602,16 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 pass
 
         try:
-            self.current_layer_id = layer.id() if layer is not None and hasattr(layer, 'id') else None
+            self.grid_layer = layer.id() if layer is not None and hasattr(layer, 'id') else None
         except Exception:
-            self.current_layer_id = None
+            self.grid_layer = None
 
-        self._log(f"updateLayer: new={self.current_layer_id}")
+        self._log(f"updateLayer: new={self.grid_layer}")
 
         restored = False
-        if self.current_layer_id is not None:
+        if self.grid_layer is not None:
             try:
-                restored = self._restore_selection_for_layer(self.current_layer_id)
+                restored = self._restore_selection_for_layer(self.grid_layer)
             except Exception:
                 restored = False
 
@@ -624,7 +624,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
         # reconnect handlers
         try:
             if id_sel is not None and hasattr(id_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
+                lid = self.grid_layer
                 def _id_handler(_idx, lid=lid):
                     self._save_current_selection(lid)
                 self._id_selector_conn = _id_handler
@@ -633,7 +633,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
             pass
         try:
             if name_sel is not None and hasattr(name_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
+                lid = self.grid_layer
                 def _name_handler(_idx, lid=lid):
                     self._save_current_selection(lid)
                 self._name_selector_conn = _name_handler
@@ -682,27 +682,27 @@ class POICombinedReach(QDialog, FORM_CLASS):
                 pass
 
         try:
-            self.current_layer_id = layer.id() if layer is not None and hasattr(layer, 'id') else None
+            self.grid_layer = layer.id() if layer is not None and hasattr(layer, 'id') else None
         except Exception:
-            self.current_layer_id = None
+            self.grid_layer = None
 
         restored = False
         try:
-            if self.current_layer_id is not None:
-                restored = self._restore_selection_for_layer(self.current_layer_id)
+            if self.grid_layer is not None:
+                restored = self._restore_selection_for_layer(self.grid_layer)
         except Exception:
             restored = False
 
         if not restored:
             try:
-                self._save_current_selection(self.current_layer_id)
+                self._save_current_selection(self.grid_layer)
             except Exception:
                 pass
 
         # connect handlers
         try:
             if id_sel is not None and hasattr(id_sel, 'currentIndexChanged'):
-                lid = self.current_layer_id
+                lid = self.grid_layer
                 def _id_handler(_idx, lid=lid):
                     try:
                         self._save_current_selection(lid)
@@ -770,7 +770,7 @@ class POICombinedReach(QDialog, FORM_CLASS):
         self.labelCurrentStatus.setText("Evaluating dataset...")
         self.repaint()
 
-        src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+        src_layer = QgsProject.instance().mapLayer(self.grid_layer)
 
         # Check file paths
         if not self.activeODM_fileSelector.filePath():
@@ -838,17 +838,36 @@ class POICombinedReach(QDialog, FORM_CLASS):
         self._log("Combined Model Build STARTED")
         self._log("="*50)
 
+        prep_start = time.time()
 
         self.labelCurrentStatus.setText("Collect origins and destinations..")
         self.repaint()
 
-        origins, destinations, selection = sub_collectODs(self, name_field=None, id_field=self.idSelector.currentText(), use_name=False)
+        origins, destinations, origins_selection = sub_collectODs(self, id_field=self.idSelector.currentText(), bar=self.progressBar)
 
-        # origins are selected features, destinations are all features (or selected if option is checked)
-        step_start = time.time()
+        print(f"Collected {len(origins)} origins and {len(origins_selection)} are in selection, {len(destinations)} destinations")
 
-        self.labelCurrentStatus.setText("Origins and destinations preparation is finished")
+        self.labelCurrentStatus.setText("Preparing POI dataset...")
         self.repaint()
+
+        # Collect POIs 
+
+        POIs = sub_Collect_POIs(self, 
+                                id_field=self.poiGridIdNameSelector.currentText(),
+                                group_attr_field=self.poiGroupAttrSelector.currentText() if self.checkBox_UseGroups.isChecked() else None,
+                                weight_field=self._get_current_field(self._get_weight_selector()) if self.checkBox_UseWeights.isChecked() else None,
+                                use_groups =self.checkBox_UseGroups.isChecked(),
+                                use_weights = self.checkBox_UseWeights.isChecked(),
+                                bar=self.progressBar)
+
+
+        # Load and combine ODMs
+
+        prep_duration = time.time() - prep_start
+        self._log(f"Data preparation completed in {prep_duration:.3f}s")
+
+        step_start = time.time()
+        load_start = time.time()
 
         self.progressBar.setMaximum(1)
         self.progressBar.setValue(0)
@@ -868,106 +887,153 @@ class POICombinedReach(QDialog, FORM_CLASS):
                             origin_prefix_whitelist = [],
                             destination_prefix_whitelist = [],
                             bar=self.progressBar, 
-                            selection=selection, 
-                            limit=max_walk_dest_meters)
+                            selection=origins_selection if self.onlySelectedFeatures.isChecked() else None, 
+                            limit=max_walk_dest_meters,
+                            only_duration=True)
         step_duration = time.time() - step_start
         self._log(f"Read Active ODM in {step_duration:.3f}s")
 
-        # Show estimate for Walk-to-Station ODM
-        estimate_walkstation = quick_estimate_from_filesize(self.walkStation_fileSelector.filePath())
-        self.labelCurrentStatus.setText(f"Reading Walk-to-Station ODM... (est. {estimate_walkstation['estimated_string']})")
+        
+
+        # Load Active ODM
+
+        ODM = activeODM
+
+        if self.checkBox_IncludeTransit.isChecked() == True:
+
+            estimate_walkstation = quick_estimate_from_filesize(self.walkStation_fileSelector.filePath())
+            self.labelCurrentStatus.setText(f"Reading Walk-to-Station ODM... (est. {estimate_walkstation['estimated_string']})")
+            self.repaint()
+            step_start = time.time()
+            # Convert max walking time (minutes) to distance (meters) using walking speed
+            max_walk_station_meters = self.maxWalkStation.value() * self.walkingSpeed.value() * 1000 / 60
+            walkStationODM = read_ODM(filepath= self.walkStation_fileSelector.filePath(), 
+                                    remove_prefix = False,
+                                    origin_prefix_whitelist = [], 
+                                    destination_prefix_whitelist = ["PT"],
+                                    bar=self.progressBar, 
+                                    selection=None, 
+                                    limit=max_walk_station_meters)
+            step_duration = time.time() - step_start
+            self._log(f"Read Walk-to-Station ODM in {step_duration:.3f}s")
+
+            # Show estimate for GTFS Transit
+            estimate_gtfs = quick_estimate_from_filesize(self.GTFS_fileSelector.filePath())
+            self.labelCurrentStatus.setText(f"Reading GTFS Transit... (est. {estimate_gtfs['estimated_string']})")
+            self.repaint()
+            step_start = time.time()
+            TravelODM = read_GTFS(filepath= self.GTFS_fileSelector.filePath(), 
+                            max_duration=int(self.maxTotalTime.value()))
+            step_duration = time.time() - step_start
+            self._log(f"Read GTFS Transit in {step_duration:.3f}s")
+            self._log(f"GTFS Transit ODM contains {len(TravelODM)} entries")
+
+
+            # PTODM_ByOrigin
+
+            self.labelCurrentStatus.setText("Build combined distance map...")
+            self.repaint()
+
+            ODM = PTODM_ByOrigin(
+                PTAccess = walkStationODM, 
+                PTTravel = TravelODM, 
+                WalkingODM = activeODM, 
+                OriginSelection = origins_selection, 
+                DestinationSelection=destinations, 
+                max_total_duration=self.maxTotalTime.value(), 
+                max_walking_duration=self.maxWalkStation.value(),
+                max_direct_walking_duration=self.maxWalkDest.value(),
+                bar=self.progressBar)
+
+        load_duration = time.time() - load_start
+        self._log(f"Data loading and preparation completed in {load_duration:.3f}s")
+
+
+        calculate_start = time.time()
+
+        max_duration = max(self.maxTotalTime.value(),self.maxWalkDest.value() )
+
+        self.labelCurrentStatus.setText("Calculating reachability with decay...")
         self.repaint()
-        step_start = time.time()
-        # Convert max walking time (minutes) to distance (meters) using walking speed
-        max_walk_station_meters = self.maxWalkStation.value() * self.walkingSpeed.value() * 1000 / 60
-        walkStationODM = read_ODM(filepath= self.walkStation_fileSelector.filePath(), 
-                                  remove_prefix = False,
-                                  origin_prefix_whitelist = [], 
-                                  destination_prefix_whitelist = ["PT"],
-                                  bar=self.progressBar, 
-                                  selection=selection, 
-                                  limit=max_walk_station_meters)
-        step_duration = time.time() - step_start
-        self._log(f"Read Walk-to-Station ODM in {step_duration:.3f}s")
 
-        # Show estimate for GTFS Transit
-        estimate_gtfs = quick_estimate_from_filesize(self.GTFS_fileSelector.filePath())
-        self.labelCurrentStatus.setText(f"Reading GTFS Transit... (est. {estimate_gtfs['estimated_string']})")
-        self.repaint()
-        step_start = time.time()
-        TravelODM = read_GTFS(filepath= self.GTFS_fileSelector.filePath(), 
-                         max_duration=int(self.maxTotalTime.value()))
-        step_duration = time.time() - step_start
-        self._log(f"Read GTFS Transit in {step_duration:.3f}s")     
+        self._log(f"Max duration for reachability: {max_duration} minutes")
+        if self.checkBox_UseDecay.isChecked():
+            self._log(f"Decay platoo: {self.decayPlatoo.value()} minutes, Half decay duration: {self.halfDecayDuration.value()} minutes")
 
 
+        # by default origins_selection should be all origins.
 
-        # PTODM_ByOrigin
-
-
-        self.labelCurrentStatus.setText("Build combined distance map...")
-        self.repaint()
-
-        ODM = PTODM_ByOrigin(
-            PTAccess = walkStationODM, 
-            PTTravel = TravelODM, 
-            WalkingODM = activeODM, 
-            OriginSelection = selection, 
-            DestinationSelection=destinations, 
-            max_total_duration=self.maxTotalTime.value(), 
-            max_walking_duration=self.maxWalkStation.value(),
-            max_direct_walking_duration=self.maxWalkDest.value(),
-            bar=self.progressBar)
-
-        self.labelCurrentStatus.setText("Combined distance map built.")
-        self.repaint()
+        Reach, groups = POIREach_wDecay(ODM=ODM,
+                            POIs=POIs, 
+                            origin_selection = origins_selection,
+                            Max_Duration = max_duration,
+                            Plato=self.decayPlatoo.value(),
+                            Half=self.halfDecayDuration.value(),
+                            Use_Decay=self.checkBox_UseDecay.isChecked(),
+                            Use_Groups = self.checkBox_UseGroups.isChecked(),
+                            Suffix = self.exportSuffixInput.text() if hasattr(self, 'exportSuffixInput') else "W15",
+                            bar=self.progressBar)
 
         self.labelCurrentStatus.setText("Exporting results...")
         self.repaint()
 
-        sub_Export_Combined_GeoJSON(self, ODM, origins)
+        calculate_duration = time.time() - calculate_start
+        self._log(f"Calculated reachability in {calculate_duration:.3f}s")
+
+        export_start = time.time()
+
+        sub_Export_GeoJSON(self, Reach, origins_selection, groups)
+
+        export_duration = time.time() - export_start
 
         self.labelCurrentStatus.setText("Done")
         self.repaint()
 
+
+        
         build_duration = time.time() - build_start
         self._log(f"Combined Model Build COMPLETED in {build_duration:.3f}s total")
+        self._log(f"Data preparation completed in {prep_duration:.3f}s")
+        self._log(f"Data loading and preparation completed in {load_duration:.3f}s")
+        self._log(f"Calculated reachability in {calculate_duration:.3f}s")
+        self._log(f"Exported results in {export_duration:.3f}s")
+
         self._log("="*50 + "\n")
 
         return True
 
 
-
-
-def sub_collectODs(self, name_field, id_field, use_name=True, bar=None):
+def sub_collectODs(self, id_field, bar=None):
 
 
     """
 
-    Collect origin and destination IDs from input layer.
-    Origins are determined based on selection (if "only selected" is checked) or all features
-    Destinations are always collected from all features.
+    DESCRIPTION:
+        Collect origin and destination IDs from input layer.
+
+    ARGUMENTS:
+        id_field (str): Name of the field to use as ID for origins and destinations.
+        bar (QProgressBar, optional): Progress bar to update during collection.
+
+    RETURNS:
+        origins (list): List of origin IDs (strings).
+        destinations (list): List of destination IDs (strings).
+        origin_selection (list): List of selected origin IDs if "Only Selected Features" is checked, otherwise empty list.
+
 
     """
 
 
-    src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+    src_layer = QgsProject.instance().mapLayer(self.grid_layer) 
 
     all_features = [feat for feat in src_layer.getFeatures()]
 
-    if (self.onlySelectedFeatures.isChecked() == True):
-
-        features = src_layer.selectedFeatures()
-        
-    else:
-
-        features = all_features
 
     origins = []
     destinations = []
-    selection = []
+    origin_selection = []
 
-    self.labelCurrentStatus.setText("Collecting destinations ...")
+    self.labelCurrentStatus.setText("Collecting destinations and origins ...")
     self.repaint()
     if bar is not None:
         bar.setMaximum(len(all_features))
@@ -982,40 +1048,160 @@ def sub_collectODs(self, name_field, id_field, use_name=True, bar=None):
         
         id_ = str(feat[id_field])
         destinations.append( id_ )
+        origins.append(id_)
 
 
-    self.labelCurrentStatus.setText("Collecting origins|destinations ...")
-    self.repaint()
+    if (self.onlySelectedFeatures.isChecked() == True):
+
+        features = src_layer.selectedFeatures()
+
+        self.labelCurrentStatus.setText("Collecting origin selection...")
+        self.repaint()
+        if bar is not None:
+            bar.setMaximum(len(features))
+            bar.setValue(0)
+            bar.repaint()
+            QCoreApplication.processEvents()
+
+        for i, feat in enumerate(features):
+
+            if bar is not None:
+                bar.setValue(i)
+                bar.repaint()
+                QCoreApplication.processEvents()
+            
+            id_ = str(feat[id_field])
+
+            origin_selection.append(id_)
+    else:
+        origin_selection = origins
+
+
+    return origins, destinations, origin_selection
+
+def sub_Collect_POIs(self, id_field, group_attr_field, weight_field, use_groups, use_weights, bar=None):
+    """
+
+    DESCRIPTION:
+        Collect POI information from the POI layer.
+        Groups POIs by attribute value if use_groups is True, otherwise groups all under "_".
+        Each group contains a dictionary of destination IDs mapped to weights.
+    
+    ARGUMENTS:
+        id_field (str): Name of the field to use as ID for POIs.
+        group_attr_field (str): Name of the field to use for grouping POIs (optional).
+        weight_field (str): Name of the field to use for weighting POIs (optional).
+        use_groups (bool): Whether to use grouping for POIs.
+        use_weights (bool): Whether to use weighting for POIs.
+        bar (QProgressBar, optional): Progress bar to update during collection.
+
+    RETURNS:
+        pois (dict): Structure: {group_name: {destination_id: weight, ...}, ...}
+                     If use_groups is False, all POIs grouped under "_".
+                     If use_weights is False, all weights default to 1.0.
+
+    """
+    
+    POI_DEFAULT_KEY = "__"
+
+
+    # Get POI layer
+    poi_layer_widget = getattr(self, 'poiLayer', None)
+    if poi_layer_widget is None or not hasattr(poi_layer_widget, 'currentLayer'):
+        self._log("ERROR: POI layer widget not found", level='debug')
+        return {}
+    
+    try:
+        poi_layer = poi_layer_widget.currentLayer()
+    except Exception as e:
+        self._log(f"ERROR: Failed to get POI layer: {str(e)}", level='debug')
+        return {}
+    
+    if poi_layer is None:
+        self._log("ERROR: No POI layer selected", level='debug')
+        return {}
+    
+    # Get all POI features
+    poi_features = [feat for feat in poi_layer.getFeatures()]
+    
+    if len(poi_features) == 0:
+        self._log("WARNING: No features found in POI layer")
+        return {"_": {}}
+    
+    self._log(f"Collecting {len(poi_features)} POIs from layer '{poi_layer.name()}'")
+    self._log(f"  ID field: {id_field}, Use groups: {use_groups}, Use weights: {use_weights}")
+    if use_groups:
+        self._log(f"  Group attribute: {group_attr_field}")
+    if use_weights:
+        self._log(f"  Weight attribute: {weight_field}")
+    
+    # Initialize progress bar
     if bar is not None:
-        bar.setMaximum(len(features))
+        bar.setMaximum(len(poi_features))
         bar.setValue(0)
         bar.repaint()
         QCoreApplication.processEvents()
-    for i, feat in enumerate(features):
-
+    
+    # Initialize POI dictionary: {group: {destination_id: weight, ...}, ...}
+    pois = {}
+    
+    # Iterate through all POI features
+    for i, feat in enumerate(poi_features):
         if bar is not None:
             bar.setValue(i)
             bar.repaint()
             QCoreApplication.processEvents()
         
-        id_ = str(feat[id_field])
+        try:
+            # Get destination ID from id_field
+            destination_id = str(feat[id_field])
+            
+            # Get group attribute
+            if use_groups and group_attr_field:
+                try:
+                    group = str(feat[group_attr_field])
+                except Exception:
+                    group = POI_DEFAULT_KEY
+                    self._log(f"WARNING: Could not read group attribute for feature {i}, using default", level='debug')
+            else:
+                group = POI_DEFAULT_KEY
+            
+            # Get weight
+            if use_weights and weight_field:
+                try:
+                    weight = float(feat[weight_field])
+                except Exception:
+                    weight = 1.0
+                    self._log(f"WARNING: Could not read weight for feature {i}, using 1.0", level='debug')
+            else:
+                weight = 1.0
+            
+            # Initialize group dictionary if needed
+            if group not in pois:
+                pois[group] = {}
+            
+            # Add POI to group with destination ID as key and weight as value
+            pois[group][destination_id] = weight
+            
+        except Exception as e:
+            self._log(f"ERROR processing POI feature {i}: {str(e)}", level='debug')
+            continue
+    
+    if bar is not None:
+        bar.setValue(len(poi_features))
+        bar.repaint()
+        QCoreApplication.processEvents()
+    
+    # Log summary
+    total_pois = sum(len(group_pois) for group_pois in pois.values())
+    self._log(f"Collected {total_pois} POIs across {len(pois)} group(s)")
+    for group in sorted(pois.keys()):
+        group_pois = pois[group]
+        self._log(f"  Group '{group}': {len(group_pois)} POIs")
+    
+    return pois
 
-        if use_name:
-            name = str(feat[name_field]) + f" ({id_})"
-        else:
-            name = str(id_)  
-
-        origins.append( (id_, name) )
-        selection.append(id_)
-
-
-    return origins, destinations, selection
-
-
-
-
-
-def sub_Export_GeoJSON(self, ODM, origins):
+def sub_Export_GeoJSON(self, Reach, origins, groups):
     """
     GeoJSON export using Python's json library - writes directly to GeoJSON file.
     Much faster than QGIS layer updates. No QGIS API overhead.
@@ -1025,7 +1211,7 @@ def sub_Export_GeoJSON(self, ODM, origins):
     self._log("=== GeoJSON EXPORT (JSON Library) ===")
     self._log(f"Starting GeoJSON export with {len(origins)} origins")
     
-    src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
+    src_layer = QgsProject.instance().mapLayer(self.grid_layer)
     crs_authid = src_layer.crs().authid()
 
     # Step 1: Load features
@@ -1056,44 +1242,23 @@ def sub_Export_GeoJSON(self, ODM, origins):
     data_lookups = 0
     distance_values_set = 0
 
-    # print(origins)
-
     for i, feat in enumerate(feats):
         # if (i + 1) % max(1, len(feats) // 2) == 0:
         bar.setValue(i)
         QCoreApplication.processEvents()
 
-        destination = feat[id_field_name]
+        origin = feat[id_field_name]
         feat_attrs = {}
         
         # Copy all original attributes
         for field in feat.fields():
             feat_attrs[field.name()] = feat[field.name()]
 
-        # Add distance/duration fields
-        for origin in origins:
-            
-            id_ = origin[0]
-            name = origin[1] # it is final name with ID in brackets if checkbox is checked
-
-            result_distance = -1
-            result_duration = -1
-
-            if destination == id_:
-                result_distance = 0
-                result_duration = 0
-            elif id_ in ODM and destination in ODM[id_]:
-                distance, duration, walk_time = ODM[id_][destination]
-                result_distance = distance
-                result_duration = duration
-                data_lookups += 1
-
-            if self.checkBox_ResultDistance.isChecked():
-                feat_attrs[f"from_{name}_Distance"] = result_distance
-                distance_values_set += 1
-            if self.checkBox_ResultDuration.isChecked():
-                feat_attrs[f"from_{name}_Duration"] = result_duration
-                distance_values_set += 1
+        for group in groups:
+            val = -1
+            if origin in Reach:
+                val = Reach[origin][group]
+            feat_attrs[group] = val  # Default to None for all groups
 
         feature_data[feat.id()] = (feat, feat_attrs)
 
@@ -1207,162 +1372,3 @@ def sub_Export_GeoJSON(self, ODM, origins):
     self._log("=== END GeoJSON EXPORT ===")
     
     return True
-
-
-
-
-def sub_Export_Combined_GeoJSON(self, ODM, origins):
-    """
-    Export combined model routing results to GeoJSON.
-    Output fields: AccessWalk, TransitTime, EgressWalk, TotalTime
-    """
-    
-    total_start = time.time()
-    self._log("=== Combined Model GeoJSON EXPORT ===")
-    self._log(f"Starting export with {len(origins)} origins")
-    
-    src_layer = QgsProject.instance().mapLayer(self.current_layer_id)
-    crs_authid = src_layer.crs().authid()
-    
-    self.labelCurrentStatus.setText("Loading features...")
-    self.repaint()
-
-    step_start = time.time()
-    feats = [feat for feat in src_layer.getFeatures()]
-    step_duration = time.time() - step_start
-    self._log(f"[1/4] Load features: {step_duration:.3f}s ({len(feats)} features)")
-
-    # Step 2: Prepare data
-    self.labelCurrentStatus.setText("Preparing data...")
-    self.repaint()
-
-    step_start = time.time()
-    geojson_features = []
-    
-    print(origins) # BUG: check origins format
-    for feat in feats:
-        feat_dict = {
-            'type': 'Feature',
-            'geometry': json.loads(feat.geometry().asJson()),
-            'properties': {}
-        }
-        
-        # Copy base attributes
-        for field_name in feat.fields().names():
-            try:
-                feat_dict['properties'][field_name] = _qvariant_to_python(feat[field_name])
-            except Exception:
-                pass
-        
-        # Add routing results for each destination
-        dest_id = str(feat[self.idSelector.currentText()])
-
-        
-        
-
-
-        if dest_id in ODM:
-            for origin_data in origins:
-                if isinstance(origin_data, tuple):
-                    origin_id, origin_name = origin_data
-                else:
-                    origin_id = origin_data
-                    origin_name = origin_id
-                
-                if origin_id in ODM[dest_id]:
-                    route_data = ODM[dest_id][origin_id]
-                    feat_dict['properties'][f'from_{origin_name}_TotalTime_min'] = route_data.get('total_time', -1)
-                    feat_dict['properties'][f'from_{origin_name}_Distance_m'] = route_data.get('distance', -1)
-                    feat_dict['properties'][f'from_{origin_name}_Duration_min'] = route_data.get('duration', -1)
-        
-        geojson_features.append(feat_dict)
-    
-    step_duration = time.time() - step_start
-    self._log(f"[2/4] Prepare data: {step_duration:.3f}s")
-
-    # Step 3: Write GeoJSON file
-    self.labelCurrentStatus.setText("Writing GeoJSON file...")
-    self.repaint()
-
-    step_start = time.time()
-
-    # Get the directory of the grid input layer
-    output_dir = None
-    
-    # Try multiple methods to get the layer source path
-    try:
-        # Method 1: Try dataProvider().dataSourceUri()
-        src_file = src_layer.dataProvider().dataSourceUri()
-        if src_file and os.path.isabs(src_file):
-            output_dir = os.path.dirname(src_file)
-    except Exception:
-        pass
-    
-    # Method 2: Try the 'source' property
-    if not output_dir:
-        try:
-            src_file = src_layer.source()
-            if src_file and os.path.isabs(src_file) and not src_file.startswith('PG:'):
-                output_dir = os.path.dirname(src_file)
-        except Exception:
-            pass
-    
-    # Fallback to user's home directory if no valid path found
-    if not output_dir:
-        output_dir = os.path.expanduser('~')
-        self._log(f"Warning: Could not determine grid layer path, using home directory: {output_dir}", level='debug')
-    
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_file = os.path.join(
-        output_dir,
-        f'combined_model_results_{timestamp}.geojson'
-    )
-    
-    self._log(f"Output directory: {output_dir}", level='debug')
-    
-    geojson_dict = {
-        'type': 'FeatureCollection',
-        'crs': {'type': 'name', 'properties': {'name': src_layer.crs().authid()}},
-        'features': geojson_features
-    }
-    
-    class QVariantEncoder(json.JSONEncoder):
-        """Custom JSON encoder to handle QVariant and other non-serializable types."""
-        def default(self, obj):
-            obj_converted = _qvariant_to_python(obj)
-            if obj_converted == str(obj):  # Fallback was applied
-                return obj_converted
-            return super().default(obj)
-    
-    with open(output_file, 'w') as f:
-        json.dump(geojson_dict, f, indent=2, cls=QVariantEncoder)
-    
-    step_duration = time.time() - step_start
-    self._log(f"[3/4] Write GeoJSON: {step_duration:.3f}s")
-    self._log(f"Output: {output_file}")
-    
-    # Step 4: Load into QGIS
-    self.labelCurrentStatus.setText("Loading results layer...")
-    self.repaint()
-
-    step_start = time.time()
-    
-    try:
-        result_layer = QgsVectorLayer(output_file, os.path.basename(output_file), "ogr")
-        if not result_layer.isValid():
-            self._log("ERROR: Failed to load output GeoJSON layer")
-            return False
-        
-        QgsProject.instance().addMapLayer(result_layer)
-        step_duration = time.time() - step_start
-        self._log(f"[4/4] Load layer: {step_duration:.3f}s")
-        
-    except Exception as e:
-        self._log(f"ERROR loading layer: {str(e)}")
-        return False
-
-    total_duration = time.time() - total_start
-    self._log(f"=== TOTAL TIME: {total_duration:.3f}s ===")
-    self._log(f"Summary: {len(feats)} features × {len(origins)} origins")
-    self._log(f"Output: {output_file}")
-    self._log("=== END GeoJSON EXPORT ===")

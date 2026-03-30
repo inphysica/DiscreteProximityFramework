@@ -599,9 +599,9 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_Options">
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_prefix">
+       <layout class="QHBoxLayout" name="horizontalLayout_suffix">
         <item>
-         <widget class="QLabel" name="label_prefix">
+         <widget class="QLabel" name="label_suffix">
           <property name="minimumWidth">
            <number>190</number>
           </property>
@@ -609,12 +609,12 @@
            <number>190</number>
           </property>
           <property name="text">
-           <string>Prefix</string>
+           <string>Suffix</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QLineEdit" name="exportPrefixInput">
+         <widget class="QLineEdit" name="exportSuffixInput">
           <property name="minimumHeight">
            <number>20</number>
           </property>
