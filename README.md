@@ -12,7 +12,6 @@ The plugin provides four analysis tools accessible from the Plugins menu and too
 
 1. **Active Model Distance Map** - Calculate distance/duration maps using Active Mobility ODM
 2. **Combined Model Distance Map** - Multimodal analysis combining Active ODM + GTFS + Walking
-3. **ODM Reach** - Generic ODM reachability analysis
 4. **POI Combined Reach** - Combined reachability analysis from Points of Interest
 
 ## Files:
@@ -27,11 +26,8 @@ The plugin provides four analysis tools accessible from the Plugins menu and too
 - `activeodm_distancemap_dialog_base.ui` - UI definition for Active Mobility dialog
 - `combinedodm_distancemap_dialog.py` - Combined multimodal distance map analysis with file load estimation
 - `combinedodm_distancemap_dialog_base.ui` - UI definition for Combined model dialog with hint labels
-- `odm_reach_dialog.py` - Generic ODM reachability analysis with file load estimation
-- `odm_reach_dialog_base.ui` - UI definition for ODM Reach dialog
 - `poi_combined_reach_dialog.py` - POI combined reachability analysis with grouping, weighting, and decay options
 - `poi_combined_reach_dialog_base.ui` - UI definition for POI Combined Reach dialog with hint labels and suffix field
-- `combinedreach_analysis_dialog.py` - Combined reach analysis utility
 
 ### Analytics Module
 - `Analytics/IO.py` - ODM file reading and processing utilities; file load time estimation
