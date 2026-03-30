@@ -58,95 +58,6 @@ def quick_estimate_from_filesize(filepath):
             'error': str(e)
         }
 
-def estimate_sqlite_load_time(filepath, selection=None, limit=0):
-    """
-    Estimate how long it will take to load the SQLite ODM file.
-    
-    Returns:
-        dict with keys: 'estimated_seconds', 'estimated_string', 'total_rows', 'file_size_mb'
-    """
-    try:
-        # Get file size
-        file_size_bytes = os.path.getsize(filepath)
-        file_size_mb = file_size_bytes / (1024 * 1024)
-        
-        # Quick connection to get row count
-        conn = sqlite3.connect(filepath)
-        cursor = conn.cursor()
-        
-        # Get total row count
-        cursor.execute("SELECT COUNT(*) FROM OD")
-        total_rows = cursor.fetchone()[0]
-        
-        # Get row count with filtering if applicable
-        filtered_rows = total_rows
-        if selection is not None and len(selection) > 0:
-            placeholders = ",".join(["?"] * len(selection))
-            query = f"SELECT COUNT(*) FROM OD WHERE origin IN ({placeholders})"
-            cursor.execute(query, selection)
-            filtered_rows = cursor.fetchone()[0]
-            
-            if limit > 0:
-                query = f"SELECT COUNT(*) FROM OD WHERE origin IN ({placeholders}) AND distance < ?"
-                cursor.execute(query, selection + [limit])
-                filtered_rows = cursor.fetchone()[0]
-        else:
-            if limit > 0:
-                cursor.execute("SELECT COUNT(*) FROM OD WHERE distance < ?", (limit,))
-                filtered_rows = cursor.fetchone()[0]
-        
-        conn.close()
-        
-        # Estimate based on empirical measurements:
-        # - SQLite sequential read on SSD: ~50 MB/s
-        # - Per-row processing overhead: ~0.0001 seconds per row
-        # - Total estimate = (file_size / read_speed) + (row_count * overhead)
-        
-        read_speed_mb_s = 50  # MB/s for modern SSD
-        processing_overhead_per_row = 0.00005  # seconds
-        
-        # Time to read file
-        file_read_time = file_size_mb / read_speed_mb_s
-        
-        # Time to process rows (parsing, string operations, dict insertions)
-        processing_time = filtered_rows * processing_overhead_per_row
-        
-        # Add overhead for filtering/parsing
-        if selection is not None or limit > 0:
-            processing_time *= 1.2  # 20% penalty for filtering
-        
-        total_estimated_time = file_read_time + processing_time
-        
-        # Format as human-readable string
-        if total_estimated_time < 1:
-            time_string = f"{total_estimated_time*1000:.0f} ms"
-        elif total_estimated_time < 60:
-            time_string = f"{total_estimated_time:.1f}s"
-        else:
-            minutes = int(total_estimated_time // 60)
-            seconds = int(total_estimated_time % 60)
-            time_string = f"{minutes}m {seconds}s"
-        
-        return {
-            'estimated_seconds': total_estimated_time,
-            'estimated_string': time_string,
-            'total_rows': total_rows,
-            'filtered_rows': filtered_rows,
-            'file_size_mb': file_size_mb,
-            'file_read_time': file_read_time,
-            'processing_time': processing_time
-        }
-        
-    except Exception as e:
-        print(f"Error estimating load time: {str(e)}")
-        return {
-            'estimated_seconds': 0,
-            'estimated_string': "Unknown",
-            'total_rows': 0,
-            'file_size_mb': 0,
-            'error': str(e)
-        }
-
 def get_sqlite_info(filepath):
     """
     Get detailed information about the SQLite ODM file.
@@ -193,16 +104,35 @@ def get_sqlite_info(filepath):
         print(f"Error getting SQLite info: {str(e)}")
         return {'error': str(e)}
 
-def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], destination_prefix_whitelist = [], max_duration = 0, bar = None, selection = None, limit=0 ):
+def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], destination_prefix_whitelist = [], max_duration = 0, bar = None, selection = None, limit=0, only_duration = False):
 
 
     """
+
+    DESCRIPTION:
+            Read ODM from SQLite file and return as nested dictionary.
+            Can filter by origin/destination prefixes, max duration, and selection of origins.
+
+    ARGUMENTS:
+        filepath            : path to SQLite ODM file
+        remove_prefix       : if True, remove any prefix before "-" in origin/destination IDs
+        origin_prefix_whitelist      : list of allowed prefixes for origins (e.g. ["EE", "PT"])
+        destination_prefix_whitelist : list of allowed prefixes for destinations (e.g. ["EE", "PT"])
+        max_duration        : if > 0, only include entries with duration <= max_duration    
+        bar                 : QProgressBar to update during loading (optional)
+        selection           : list of origin IDs to include (optional)
+        limit               : if > 0, only include entries with distance <= limit
+        only_duration       : if True, D[origin][destination] = duration instead of (distance, duration)
         
     RETURN:
         D[origin][destination] = (distance, duration)
+        if only_duration is True, then D[origin][destination] = duration
+
 
 
     """
+
+    print( "read ODM: " + filepath)
 
     hasOriginPrefixWhitelist = False
     hasDestinationPrefixWhitelist = False
@@ -251,7 +181,6 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
     skipped = 0
 
     stat = 0
-
 
     if bar is not None:
         bar.setMaximum(len(rows))
@@ -313,7 +242,11 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
         if origin not in D:
             D[origin] = {}
 
-        D[origin][destination] = (distance, duration)
+
+        if only_duration:
+            D[origin][destination] = duration
+        else:
+            D[origin][destination] = (distance, duration)
 
         # if "PT" in origin and "GRD" in destination:
         #     stat += 1
@@ -321,10 +254,6 @@ def read_ODM( filepath, remove_prefix = True, origin_prefix_whitelist = [], dest
     time_diff = datetime.now() - stamp_0
     print( " -> time:  %s[s]" % time_diff)
     print( " -> total: %s skipped: %s kept: %s" % (len(rows), skipped , len(rows) - skipped ))
-
-    if bar is not None:
-        bar.setValue(len(rows))
-        QCoreApplication.processEvents()
 
     return D
 
@@ -339,7 +268,6 @@ def read_GTFS(filepath, max_duration = 0, bar = None):
 
 
     """
-
 
     print( "read GTFS: " + filepath)
 
@@ -406,4 +334,4 @@ def read_GTFS(filepath, max_duration = 0, bar = None):
     print( " -> total: %s skipped: %s kept: %s" % (len(rows), skipped , len(rows) - skipped ))
     
 
-    return PT, PT_start, PT_end
+    return PT
