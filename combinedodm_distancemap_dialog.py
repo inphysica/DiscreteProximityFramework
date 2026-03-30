@@ -733,8 +733,6 @@ class CombinedODMDistanceMapDialog(QDialog, FORM_CLASS):
         self._log(f"Read Active ODM in {step_duration:.3f}s")
 
 
-        # print(activeODM)
-
 
         estimate_walkstation = quick_estimate_from_filesize(self.walkStation_fileSelector.filePath())
         self.labelCurrentStatus.setText(f"Reading Walk-to-Station ODM... (est. {estimate_walkstation['estimated_string']})")

@@ -68,21 +68,21 @@ class DiscreteProximityFramework:
             # Older/newer QGIS may differ; ignore if toolbar API not present
             pass
 
-        # ODM Reach action
-        icon_path = os.path.join(os.path.dirname(__file__), "icons", "Reach.png")
-        self.ODMReach = QAction(QIcon(icon_path), self.tr('ODM Reach'), self.iface.mainWindow())
-        self.ODMReach.setObjectName('actionODMReach')
-        self.ODMReach.setToolTip(self.tr('Run ODM Reach Analysis'))
-        self.ODMReach.triggered.connect(self.run_odm_reach)
+        # # ODM Reach action
+        # icon_path = os.path.join(os.path.dirname(__file__), "icons", "Reach.png")
+        # self.ODMReach = QAction(QIcon(icon_path), self.tr('ODM Reach'), self.iface.mainWindow())
+        # self.ODMReach.setObjectName('actionODMReach')
+        # self.ODMReach.setToolTip(self.tr('Run ODM Reach Analysis'))
+        # self.ODMReach.triggered.connect(self.run_odm_reach)
 
-        # Add to Plugins menu
-        self.iface.addPluginToMenu(self.tr('&Discrete Proximity Framework'), self.ODMReach)
+        # # Add to Plugins menu
+        # self.iface.addPluginToMenu(self.tr('&Discrete Proximity Framework'), self.ODMReach)
 
-        try:
-            self.iface.addToolBarIcon(self.ODMReach)
-        except Exception:
-            # Older/newer QGIS may differ; ignore if toolbar API not present
-            pass
+        # try:
+        #     self.iface.addToolBarIcon(self.ODMReach)
+        # except Exception:
+        #     # Older/newer QGIS may differ; ignore if toolbar API not present
+        #     pass
 
         # Combined Reach Analysis action
 
@@ -176,10 +176,10 @@ class DiscreteProximityFramework:
         dialog = CombinedODMDistanceMapDialog(self.iface.mainWindow(), iface=self.iface)
         result = dialog.exec_()
 
-    def run_odm_reach(self):
-        """Handler for 'ODM Reach' action."""
-        dialog = ODMReachDialog(self.iface.mainWindow(), iface=self.iface)
-        result = dialog.exec_()
+    # def run_odm_reach(self):
+    #     """Handler for 'ODM Reach' action."""
+    #     dialog = ODMReachDialog(self.iface.mainWindow(), iface=self.iface)
+    #     result = dialog.exec_()
 
     # def run_combinedreach(self):
     #     """Handler for 'Combined Reach Analysis' action."""
