@@ -1,7 +1,7 @@
 [general]
 name=Discrete Proximity Framework
 description=QGIS plugin for reachability and distance analysis using Origin-Destination Matrices (ODM)
-version=0.1.3
+version=0.1.4
 qgisMinimumVersion=3.16
 author=inphysica technology
 email=dev@inphysica.com
